@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <div class="app-shell">
@@ -30,10 +30,6 @@
       <div class="header-actions">
         <button id="scheduleDataButton" class="secondary-button header-data-button" type="button" title="Manage schedule data">Schedules</button>
         <button id="settingsButton" class="secondary-button header-data-button" type="button" title="Open settings">Settings</button>
-        <div class="theme-controls" aria-label="Appearance">
-          <button id="lightThemeButton" class="icon-button" type="button" aria-label="Use light theme" title="Light theme">☀</button>
-          <button id="darkThemeButton" class="icon-button" type="button" aria-label="Use dark theme" title="Dark theme">☾</button>
-        </div>
       </div>
     </header>
 
@@ -181,18 +177,42 @@
         <div class="settings-section-heading people-notification-heading">
           <div>
             <div class="section-kicker">People</div>
-            <h3 id="notificationPeopleTitle">Notification bells</h3>
+            <h3 id="notificationPeopleTitle">Names, pins & bells</h3>
           </div>
           <span id="notificationPeopleCount" class="count-badge">0</span>
         </div>
-        <p class="settings-description">Tap a bell to mute break notifications for that person. Muted people still appear everywhere else in the app.</p>
-        <div id="notificationPeopleList" class="notification-people-list"></div>
+        <p class="settings-description">Give friends a nickname, pin favorites to the top, or mute only their break notifications. These choices stay on this device.</p>
+        <div id="notificationPeopleList" class="notification-people-list people-preferences-list"></div>
       </section>
 
       <section class="settings-section appearance-settings-section" aria-labelledby="appearanceTitle">
         <div class="section-kicker">Appearance</div>
         <h3 id="appearanceTitle">Theme</h3>
-        <p class="settings-description">You can always switch between light and dark mode using the sun and moon buttons at the top.</p>
+        <p class="settings-description">Choose light or dark mode, then pick an accent theme. Your choice is remembered on this device.</p>
+
+        <div class="theme-mode-group" aria-label="Light or dark mode">
+          <button id="lightThemeButton" class="theme-mode-button" type="button" aria-label="Use light mode" aria-pressed="false"><span aria-hidden="true">☀</span> Light</button>
+          <button id="darkThemeButton" class="theme-mode-button" type="button" aria-label="Use dark mode" aria-pressed="true"><span aria-hidden="true">☾</span> Dark</button>
+        </div>
+
+        <div class="theme-template-label">Accent color</div>
+        <div id="colorThemeGrid" class="color-theme-grid" role="group" aria-label="Accent color theme">
+          <button class="color-theme-card" type="button" data-color-theme="blue" aria-pressed="true">
+            <span class="theme-swatch blue" aria-hidden="true"></span><span><strong>Blue</strong><small>Classic</small></span>
+          </button>
+          <button class="color-theme-card" type="button" data-color-theme="violet" aria-pressed="false">
+            <span class="theme-swatch violet" aria-hidden="true"></span><span><strong>Violet</strong><small>Playful</small></span>
+          </button>
+          <button class="color-theme-card" type="button" data-color-theme="rose" aria-pressed="false">
+            <span class="theme-swatch rose" aria-hidden="true"></span><span><strong>Rose</strong><small>Warm</small></span>
+          </button>
+          <button class="color-theme-card" type="button" data-color-theme="mint" aria-pressed="false">
+            <span class="theme-swatch mint" aria-hidden="true"></span><span><strong>Mint</strong><small>Fresh</small></span>
+          </button>
+          <button class="color-theme-card" type="button" data-color-theme="orange" aria-pressed="false">
+            <span class="theme-swatch orange" aria-hidden="true"></span><span><strong>Orange</strong><small>Bright</small></span>
+          </button>
+        </div>
       </section>
     </section>
   </div>
@@ -213,7 +233,7 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=6" defer></script>
-  <script src="app.js?v=6" defer></script>
+  <script src="schedule-parser.js?v=7" defer></script>
+  <script src="app.js?v=7" defer></script>
 </body>
 </html>

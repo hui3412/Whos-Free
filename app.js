@@ -19,6 +19,9 @@
     isParsing: false,
     notificationsEnabled: false,
     mutedPeople: new Set(),
+    nicknames: {},
+    pinnedPeople: new Set(),
+    accentTheme: "blue",
     lastPeopleSignature: "",
     lastDetailPerson: null,
     lastFreeCountText: "",
@@ -31,6 +34,9 @@
   const LOCAL_STORAGE_FALLBACK_KEY = "whos-free-local-schedules";
   const NOTIFICATION_SETTINGS_KEY = "whos-free-notification-settings-v1";
   const NOTIFICATION_HISTORY_KEY = "whos-free-notification-history-v1";
+  const PEOPLE_PREFERENCES_KEY = "whos-free-people-preferences-v1";
+  const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
+  const ACCENT_THEMES = new Set(["blue", "violet", "rose", "mint", "orange"]);
   const BREAK_THRESHOLD_MINUTES = 10;
 
   const els = {
@@ -59,6 +65,7 @@
     testNotificationButton: document.getElementById("testNotificationButton"),
     notificationPeopleCount: document.getElementById("notificationPeopleCount"),
     notificationPeopleList: document.getElementById("notificationPeopleList"),
+    colorThemeGrid: document.getElementById("colorThemeGrid"),
     liveToggle: document.getElementById("liveToggle"),
     daySelect: document.getElementById("daySelect"),
     timeInput: document.getElementById("timeInput"),
@@ -90,15 +97,50 @@
     }
   }
 
+  function loadAccentTheme() {
+    try {
+      const saved = localStorage.getItem(ACCENT_THEME_KEY);
+      return ACCENT_THEMES.has(saved) ? saved : "blue";
+    } catch {
+      return "blue";
+    }
+  }
+
+  function saveAccentTheme(theme) {
+    try {
+      localStorage.setItem(ACCENT_THEME_KEY, theme);
+    } catch {
+      // Appearance persistence is optional.
+    }
+  }
+
   function applyTheme(theme) {
     state.theme = theme;
     els.root.dataset.theme = theme;
-    els.lightThemeButton.classList.toggle("active", theme === "light");
-    els.darkThemeButton.classList.toggle("active", theme === "dark");
-    els.lightThemeButton.setAttribute("aria-pressed", String(theme === "light"));
-    els.darkThemeButton.setAttribute("aria-pressed", String(theme === "dark"));
+    els.lightThemeButton?.classList.toggle("active", theme === "light");
+    els.darkThemeButton?.classList.toggle("active", theme === "dark");
+    els.lightThemeButton?.setAttribute("aria-pressed", String(theme === "light"));
+    els.darkThemeButton?.setAttribute("aria-pressed", String(theme === "dark"));
     els.themeMeta.setAttribute("content", theme === "light" ? "#F3F6FA" : "#0A0F18");
     saveTheme(theme);
+  }
+
+  function applyAccentTheme(theme, animate = true) {
+    const next = ACCENT_THEMES.has(theme) ? theme : "blue";
+    state.accentTheme = next;
+    els.root.dataset.accentTheme = next;
+    saveAccentTheme(next);
+
+    if (els.colorThemeGrid) {
+      for (const button of els.colorThemeGrid.querySelectorAll("[data-color-theme]")) {
+        const active = button.dataset.colorTheme === next;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+        if (active && animate && canAnimate()) {
+          window.gsap.fromTo(button, { scale: 0.97 }, { scale: 1, duration: 0.24, ease: "back.out(1.8)", clearProps: "transform" });
+        }
+      }
+    }
   }
 
 
@@ -168,6 +210,37 @@
       { scale: 0.96 },
       { scale: 1, duration: 0.2, ease: "back.out(1.7)", clearProps: "transform" }
     );
+  }
+
+  function animateAppEntrance() {
+    if (!canAnimate()) return;
+    const targets = [
+      document.querySelector(".brand-copy"),
+      document.querySelector(".header-actions"),
+      document.querySelector(".control-bar"),
+      document.querySelector(".people-panel"),
+      document.querySelector(".detail-panel"),
+    ].filter(Boolean);
+    window.gsap.fromTo(
+      targets,
+      { opacity: 0, y: 5 },
+      { opacity: 1, y: 0, duration: 0.28, stagger: 0.035, ease: "power2.out", clearProps: "opacity,transform" }
+    );
+  }
+
+  function animateSettingsContent() {
+    if (!canAnimate()) return;
+    const sections = Array.from(els.settingsModal.querySelectorAll(".settings-section"));
+    window.gsap.fromTo(
+      sections,
+      { opacity: 0, y: 4 },
+      { opacity: 1, y: 0, duration: 0.22, stagger: 0.035, ease: "power1.out", clearProps: "opacity,transform" }
+    );
+  }
+
+  function animateRefreshFeedback() {
+    if (!canAnimate()) return;
+    window.gsap.fromTo(els.refreshButton, { scale: 0.97 }, { scale: 1, duration: 0.18, ease: "back.out(1.6)", clearProps: "transform" });
   }
 
   function loadNotificationSettings() {
@@ -299,14 +372,14 @@
   async function sendGroupedBreakNotification(breaks) {
     if (!breaks.length) return;
 
-    const names = breaks.map(item => item.name);
+    const names = breaks.map(item => displayName(item.name));
     const durations = breaks.map(item => item.duration);
     const minDuration = Math.min(...durations);
     const maxDuration = Math.max(...durations);
     const allSameEnd = breaks.every(item => item.end === breaks[0].end);
 
     const title = breaks.length === 1
-      ? `${breaks[0].name} is on break`
+      ? `${displayName(breaks[0].name)} is on break`
       : `${breaks.length} friends are on break`;
 
     let body;
@@ -429,50 +502,107 @@
   }
 
   function renderNotificationPeople() {
-    const names = Object.keys(peopleMap()).sort((a, b) => a.localeCompare(b));
+    const names = Object.keys(peopleMap()).sort(comparePeopleNames);
     els.notificationPeopleCount.textContent = String(names.length);
     els.notificationPeopleList.replaceChildren();
 
     if (!names.length) {
       const empty = document.createElement("p");
       empty.className = "people-manager-empty";
-      empty.textContent = "Add a schedule before choosing notification bells.";
+      empty.textContent = "Add a schedule before personalizing people.";
       els.notificationPeopleList.append(empty);
       return;
     }
 
     for (const name of names) {
       const muted = state.mutedPeople.has(name);
+      const pinned = state.pinnedPeople.has(name);
+      const nickname = state.nicknames[name] || "";
       const row = document.createElement("div");
-      row.className = "notification-person-row";
+      row.className = `notification-person-row people-preference-card${pinned ? " pinned" : ""}`;
+
+      const top = document.createElement("div");
+      top.className = "people-preference-top";
 
       const copy = document.createElement("div");
       copy.className = "notification-person-copy";
 
       const title = document.createElement("div");
       title.className = "notification-person-name";
-      title.textContent = name;
+      title.textContent = displayName(name);
 
       const meta = document.createElement("div");
       meta.className = "notification-person-meta";
       const longBreaks = WORK_DAYS.reduce((count, day) => count + breakEventsForPerson(name, day).length, 0);
-      meta.textContent = muted
-        ? "Break alerts muted"
-        : `${longBreaks} long break${longBreaks === 1 ? "" : "s"} in the weekly schedule`;
-
+      const parts = [];
+      if (nickname) parts.push(name);
+      parts.push(pinned ? "Pinned to top" : `${longBreaks} long break${longBreaks === 1 ? "" : "s"}`);
+      if (muted) parts.push("alerts muted");
+      meta.textContent = parts.join(" · ");
       copy.append(title, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "people-preference-actions";
+
+      const pin = document.createElement("button");
+      pin.type = "button";
+      pin.className = `preference-icon-button pin-button${pinned ? " active" : ""}`;
+      pin.textContent = "📌";
+      pin.setAttribute("aria-pressed", String(pinned));
+      pin.setAttribute("aria-label", pinned ? `Unpin ${displayName(name)}` : `Pin ${displayName(name)} to the top`);
+      pin.title = pinned ? "Unpin" : "Pin to top";
+      pin.addEventListener("click", () => togglePersonPin(name, pin));
 
       const bell = document.createElement("button");
       bell.type = "button";
       bell.className = `bell-button${muted ? " muted" : ""}`;
       bell.textContent = muted ? "🔕" : "🔔";
       bell.setAttribute("aria-pressed", String(muted));
-      bell.setAttribute("aria-label", muted ? `Unmute break notifications for ${name}` : `Mute break notifications for ${name}`);
+      bell.setAttribute("aria-label", muted ? `Unmute break notifications for ${displayName(name)}` : `Mute break notifications for ${displayName(name)}`);
       bell.title = muted ? "Unmute break notifications" : "Mute break notifications";
       bell.addEventListener("click", () => togglePersonMute(name, bell));
 
-      row.append(copy, bell);
+      actions.append(pin, bell);
+      top.append(copy, actions);
+
+      const nicknameRow = document.createElement("label");
+      nicknameRow.className = "nickname-row";
+      const nicknameLabel = document.createElement("span");
+      nicknameLabel.className = "nickname-label";
+      nicknameLabel.textContent = "Nickname";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "nickname-input";
+      input.maxLength = 30;
+      input.placeholder = "Use full name";
+      input.value = nickname;
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.setAttribute("aria-label", `Nickname for ${name}`);
+
+      const saveValue = () => {
+        const next = input.value.trim();
+        const before = state.nicknames[name] || "";
+        if (next === before) return;
+        setNickname(name, next);
+        showToast(next ? `Nickname saved: ${next}` : `Showing ${name}`);
+      };
+      input.addEventListener("change", saveValue);
+      input.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          input.blur();
+        }
+      });
+
+      nicknameRow.append(nicknameLabel, input);
+      row.append(top, nicknameRow);
       els.notificationPeopleList.append(row);
+    }
+
+    if (canAnimate()) {
+      const rows = Array.from(els.notificationPeopleList.querySelectorAll(".people-preference-card"));
+      window.gsap.fromTo(rows, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.2, stagger: 0.018, ease: "power1.out", clearProps: "opacity,transform" });
     }
   }
 
@@ -485,6 +615,8 @@
     els.notificationPermissionStatus.dataset.tone = support.tone;
     els.testNotificationButton.disabled = !("Notification" in window) || Notification.permission !== "granted";
 
+    applyTheme(state.theme);
+    applyAccentTheme(state.accentTheme, false);
     renderNotificationPeople();
   }
 
@@ -494,6 +626,7 @@
     document.body.style.overflow = "hidden";
     requestAnimationFrame(() => {
       animateModalOpen(els.settingsModal, els.settingsModal.querySelector(".settings-modal"));
+      animateSettingsContent();
       els.closeSettingsModal.focus();
     });
   }
@@ -540,6 +673,83 @@
 
   function peopleMap() {
     return state.data?.people && typeof state.data.people === "object" ? state.data.people : {};
+  }
+
+  function loadPeoplePreferences() {
+    try {
+      const raw = localStorage.getItem(PEOPLE_PREFERENCES_KEY);
+      if (!raw) return { nicknames: {}, pinnedPeople: [] };
+      const parsed = JSON.parse(raw);
+      const nicknames = parsed?.nicknames && typeof parsed.nicknames === "object" && !Array.isArray(parsed.nicknames)
+        ? parsed.nicknames
+        : {};
+      const pinnedPeople = Array.isArray(parsed?.pinnedPeople) ? parsed.pinnedPeople.filter(Boolean) : [];
+      return { nicknames, pinnedPeople };
+    } catch {
+      return { nicknames: {}, pinnedPeople: [] };
+    }
+  }
+
+  function savePeoplePreferences() {
+    try {
+      localStorage.setItem(PEOPLE_PREFERENCES_KEY, JSON.stringify({
+        nicknames: state.nicknames,
+        pinnedPeople: Array.from(state.pinnedPeople),
+      }));
+    } catch {
+      // Personalization is best-effort local state.
+    }
+  }
+
+  function cleanPeoplePreferences() {
+    const valid = new Set(Object.keys(peopleMap()));
+    let changed = false;
+    for (const name of Object.keys(state.nicknames)) {
+      if (!valid.has(name)) {
+        delete state.nicknames[name];
+        changed = true;
+      }
+    }
+    for (const name of Array.from(state.pinnedPeople)) {
+      if (!valid.has(name)) {
+        state.pinnedPeople.delete(name);
+        changed = true;
+      }
+    }
+    if (changed) savePeoplePreferences();
+  }
+
+  function displayName(name) {
+    const nickname = String(state.nicknames[name] || "").trim();
+    return nickname || name;
+  }
+
+  function comparePeopleNames(a, b) {
+    const pinnedA = state.pinnedPeople.has(a);
+    const pinnedB = state.pinnedPeople.has(b);
+    if (pinnedA !== pinnedB) return pinnedA ? -1 : 1;
+    return displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" });
+  }
+
+  function setNickname(name, value) {
+    const next = String(value || "").trim().slice(0, 30);
+    if (next) state.nicknames[name] = next;
+    else delete state.nicknames[name];
+    savePeoplePreferences();
+    updateScheduleModal();
+    updateSettingsModal();
+    refresh({ preserveScroll: true });
+  }
+
+  function togglePersonPin(name, button = null) {
+    if (state.pinnedPeople.has(name)) state.pinnedPeople.delete(name);
+    else state.pinnedPeople.add(name);
+    savePeoplePreferences();
+    updateSettingsModal();
+    refresh({ preserveScroll: true });
+    if (button && canAnimate()) {
+      window.gsap.fromTo(button, { scale: 0.8, rotate: -7 }, { scale: 1, rotate: 0, duration: 0.3, ease: "back.out(2)", clearProps: "transform" });
+    }
   }
 
   function classesForDay(name, day) {
@@ -618,11 +828,18 @@
   }
 
   function visiblePeople(day, minute) {
-    const people = Object.keys(peopleMap()).sort((a, b) => a.localeCompare(b));
-    const free = people.filter(name => isFree(name, day, minute));
+    const people = Object.keys(peopleMap()).sort(comparePeopleNames);
+    const free = people.filter(name => isFree(name, day, minute)).sort(comparePeopleNames);
     const freeSet = new Set(free);
-    const busy = people.filter(name => !freeSet.has(name));
-    return { free, busy, visible: state.showEveryone ? [...free, ...busy] : free };
+    const busy = people.filter(name => !freeSet.has(name)).sort(comparePeopleNames);
+
+    if (!state.showEveryone) return { free, busy, visible: free };
+
+    const pinned = people.filter(name => state.pinnedPeople.has(name));
+    const pinnedSet = new Set(pinned);
+    const remainingFree = free.filter(name => !pinnedSet.has(name));
+    const remainingBusy = busy.filter(name => !pinnedSet.has(name));
+    return { free, busy, visible: [...pinned, ...remainingFree, ...remainingBusy] };
   }
 
   function showToast(message) {
@@ -1124,12 +1341,15 @@
 
   async function removePerson(name) {
     if (!state.hasData || !Object.prototype.hasOwnProperty.call(state.data.people || {}, name)) return;
-    const confirmed = window.confirm(`Remove ${name} from this device?`);
+    const confirmed = window.confirm(`Remove ${displayName(name)} from this device?`);
     if (!confirmed) return;
 
     delete state.data.people[name];
     state.mutedPeople.delete(name);
+    state.pinnedPeople.delete(name);
+    delete state.nicknames[name];
     saveNotificationSettings();
+    savePeoplePreferences();
     if (state.selectedPerson === name) state.selectedPerson = null;
 
     const remaining = Object.keys(state.data.people || {}).length;
@@ -1142,18 +1362,18 @@
       renderDataSetup();
       updateScheduleModal();
       updateSettingsModal();
-      showToast(`Removed ${name}`);
+      showToast(`Removed ${displayName(name)}`);
       return;
     }
 
     const warning = await persistCurrentDatabase("Local schedule collection");
     updateScheduleModal();
     updateSettingsModal();
-    showToast(warning || `Removed ${name}`);
+    showToast(warning || `Removed ${displayName(name)}`);
   }
 
   function renderPeopleManager() {
-    const names = Object.keys(peopleMap()).sort((a, b) => a.localeCompare(b));
+    const names = Object.keys(peopleMap()).sort(comparePeopleNames);
     els.peopleManagerCount.textContent = String(names.length);
     els.peopleManagerList.replaceChildren();
 
@@ -1173,18 +1393,19 @@
       copy.className = "people-manager-copy";
       const title = document.createElement("div");
       title.className = "people-manager-name";
-      title.textContent = name;
+      title.textContent = displayName(name);
       const detail = document.createElement("div");
       detail.className = "people-manager-meta";
       const person = peopleMap()[name] || {};
-      detail.textContent = `${Array.isArray(person.classes) ? person.classes.length : 0} class meetings${person.source_file ? ` · ${person.source_file}` : ""}`;
+      const identity = displayName(name) !== name ? `${name} · ` : "";
+      detail.textContent = `${identity}${Array.isArray(person.classes) ? person.classes.length : 0} class meetings${person.source_file ? ` · ${person.source_file}` : ""}`;
       copy.append(title, detail);
 
       const removeButton = document.createElement("button");
       removeButton.type = "button";
       removeButton.className = "mini-danger-button";
       removeButton.textContent = "Remove";
-      removeButton.setAttribute("aria-label", `Remove ${name}`);
+      removeButton.setAttribute("aria-label", `Remove ${displayName(name)}`);
       removeButton.addEventListener("click", () => removePerson(name));
 
       row.append(copy, removeButton);
@@ -1265,10 +1486,11 @@
     const busyClass = currentClass(name, day, minute);
     const busy = Boolean(busyClass);
     const selected = name === state.selectedPerson;
+    const pinned = state.pinnedPeople.has(name);
 
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `person-card${selected ? " selected" : ""}`;
+    button.className = `person-card${selected ? " selected" : ""}${pinned ? " pinned" : ""}`;
     button.setAttribute("role", "listitem");
     button.setAttribute("aria-pressed", String(selected));
 
@@ -1281,7 +1503,14 @@
 
     const personName = document.createElement("span");
     personName.className = "person-name";
-    personName.textContent = name;
+    personName.textContent = displayName(name);
+    if (pinned) {
+      const pinMark = document.createElement("span");
+      pinMark.className = "person-pin-mark";
+      pinMark.textContent = "📌";
+      pinMark.setAttribute("aria-hidden", "true");
+      personName.append(" ", pinMark);
+    }
 
     const detail = document.createElement("span");
     detail.className = "person-detail";
@@ -1414,7 +1643,8 @@
       const markerLabel = document.createElement("div");
       markerLabel.className = "timeline-marker-label";
       markerLabel.style.left = `${markerLeft}%`;
-      markerLabel.textContent = "selected time";
+      markerLabel.dataset.edge = markerLeft < 12 ? "start" : markerLeft > 88 ? "end" : "center";
+      markerLabel.textContent = state.useLiveTime ? "now" : formatTime(state.selectedTime);
       timeline.append(marker, markerLabel);
     }
 
@@ -1439,7 +1669,7 @@
     const header = document.createElement("div");
     header.className = "detail-header";
     const nameEl = document.createElement("h2");
-    nameEl.textContent = name;
+    nameEl.textContent = displayName(name);
     const statusRow = document.createElement("div");
     statusRow.className = "detail-status-row";
 
@@ -1576,8 +1806,19 @@
   }
 
   function bindEvents() {
-    els.lightThemeButton.addEventListener("click", () => applyTheme("light"));
-    els.darkThemeButton.addEventListener("click", () => applyTheme("dark"));
+    els.lightThemeButton.addEventListener("click", () => {
+      applyTheme("light");
+      if (canAnimate()) window.gsap.fromTo(els.lightThemeButton, { scale: 0.97 }, { scale: 1, duration: 0.2, ease: "back.out(1.7)", clearProps: "transform" });
+    });
+    els.darkThemeButton.addEventListener("click", () => {
+      applyTheme("dark");
+      if (canAnimate()) window.gsap.fromTo(els.darkThemeButton, { scale: 0.97 }, { scale: 1, duration: 0.2, ease: "back.out(1.7)", clearProps: "transform" });
+    });
+    els.colorThemeGrid.addEventListener("click", event => {
+      const button = event.target.closest("[data-color-theme]");
+      if (!button) return;
+      applyAccentTheme(button.dataset.colorTheme, true);
+    });
     els.scheduleDataButton.addEventListener("click", openScheduleModal);
     els.settingsButton.addEventListener("click", openSettingsModal);
     els.closeScheduleModal.addEventListener("click", closeScheduleModal);
@@ -1624,7 +1865,10 @@
       refresh();
     });
 
-    els.refreshButton.addEventListener("click", () => refresh());
+    els.refreshButton.addEventListener("click", () => {
+      refresh();
+      animateRefreshFeedback();
+    });
 
     els.viewToggleButton.addEventListener("click", () => {
       state.showEveryone = !state.showEveryone;
@@ -1642,7 +1886,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=6", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=7", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
@@ -1654,20 +1898,28 @@
     state.notificationsEnabled = savedNotificationSettings.enabled;
     state.mutedPeople = new Set(savedNotificationSettings.mutedPeople);
 
+    const savedPeoplePreferences = loadPeoplePreferences();
+    state.nicknames = { ...savedPeoplePreferences.nicknames };
+    state.pinnedPeople = new Set(savedPeoplePreferences.pinnedPeople);
+    state.accentTheme = loadAccentTheme();
+
     if (!("Notification" in window) || Notification.permission !== "granted") {
       state.notificationsEnabled = false;
       saveNotificationSettings();
     }
 
     applyTheme(state.theme);
+    applyAccentTheme(state.accentTheme, false);
     setLiveValues();
     syncLiveControls();
     bindEvents();
     updateScheduleModal();
     updateSettingsModal();
     registerServiceWorker();
+    requestAnimationFrame(animateAppEntrance);
 
     loadSchedulesFromDevice().then(() => {
+      cleanPeoplePreferences();
       updateSettingsModal();
       checkBreakNotifications();
     });
