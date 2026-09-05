@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <div class="app-shell">
@@ -186,31 +186,31 @@
       </section>
 
       <section class="settings-section appearance-settings-section" aria-labelledby="appearanceTitle">
-        <div class="section-kicker">Appearance</div>
-        <h3 id="appearanceTitle">Theme</h3>
-        <p class="settings-description">Choose light or dark mode, then pick an accent theme. Your choice is remembered on this device.</p>
+        <div class="section-kicker">Themes</div>
+        <h3 id="appearanceTitle">Look & feel</h3>
+        <p class="settings-description">Choose light or dark mode, then choose a full color theme. Each theme changes the page background, panels, cards, controls and accents.</p>
 
         <div class="theme-mode-group" aria-label="Light or dark mode">
           <button id="lightThemeButton" class="theme-mode-button" type="button" aria-label="Use light mode" aria-pressed="false"><span aria-hidden="true">☀</span> Light</button>
           <button id="darkThemeButton" class="theme-mode-button" type="button" aria-label="Use dark mode" aria-pressed="true"><span aria-hidden="true">☾</span> Dark</button>
         </div>
 
-        <div class="theme-template-label">Accent color</div>
-        <div id="colorThemeGrid" class="color-theme-grid" role="group" aria-label="Accent color theme">
+        <div class="theme-template-label">Color theme</div>
+        <div id="colorThemeGrid" class="color-theme-grid" role="group" aria-label="Full color theme">
           <button class="color-theme-card" type="button" data-color-theme="blue" aria-pressed="true">
-            <span class="theme-swatch blue" aria-hidden="true"></span><span><strong>Blue</strong><small>Classic</small></span>
+            <span class="theme-swatch blue" aria-hidden="true"></span><span><strong>Ocean</strong><small>Cool blue</small></span>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="violet" aria-pressed="false">
-            <span class="theme-swatch violet" aria-hidden="true"></span><span><strong>Violet</strong><small>Playful</small></span>
+            <span class="theme-swatch violet" aria-hidden="true"></span><span><strong>Lavender</strong><small>Soft purple</small></span>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="rose" aria-pressed="false">
-            <span class="theme-swatch rose" aria-hidden="true"></span><span><strong>Rose</strong><small>Warm</small></span>
+            <span class="theme-swatch rose" aria-hidden="true"></span><span><strong>Rose</strong><small>Warm pink</small></span>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="mint" aria-pressed="false">
-            <span class="theme-swatch mint" aria-hidden="true"></span><span><strong>Mint</strong><small>Fresh</small></span>
+            <span class="theme-swatch mint" aria-hidden="true"></span><span><strong>Forest</strong><small>Fresh green</small></span>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="orange" aria-pressed="false">
-            <span class="theme-swatch orange" aria-hidden="true"></span><span><strong>Orange</strong><small>Bright</small></span>
+            <span class="theme-swatch orange" aria-hidden="true"></span><span><strong>Sunset</strong><small>Warm orange</small></span>
           </button>
         </div>
       </section>
@@ -233,7 +233,7 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=7" defer></script>
-  <script src="app.js?v=7" defer></script>
+  <script src="schedule-parser.js?v=8" defer></script>
+  <script src="app.js?v=8" defer></script>
 </body>
 </html>

@@ -1,18 +1,18 @@
-# Who's Free? — Web App v7
+# Who's Free? — Web App v8
 
 A privacy-first static web app for comparing Marianopolis schedules.
 
-## What's new in v7
+## What's new in v8
 
-- Fixed narrow-phone overflow around time/status bubbles and timeline time labels.
-- Light/dark mode controls moved into **Settings → Appearance**.
-- Five saved accent-theme templates: **Blue, Violet, Rose, Mint, and Orange**.
+- Fixed the iPhone time-control overflow by stacking Day and Time on narrow screens and removing Safari's stubborn native minimum width.
+- Light/dark controls remain in **Settings → Themes**.
+- Five saved full-app theme templates: **Ocean, Lavender, Rose, Forest, and Sunset**. Each recolors backgrounds, panels, cards, inputs, buttons, borders, timelines, badges and accents.
 - Per-person **nicknames** that replace the full name throughout the main UI and notifications.
 - Per-person **pins** so favorites stay at the top of the list.
 - Existing break-notification bells remain available beside pin controls.
 - More subtle GSAP polish: app entrance, settings-section stagger, theme selection, refresh feedback, pin interactions, plus the existing card/detail/timeline/toast animations.
 - Mobile settings cards now stack cleanly with 44px-ish touch targets and no horizontal page overflow.
-- Service-worker cache bumped to **v7**.
+- Service-worker cache bumped to **v8**.
 
 ## Privacy model
 
@@ -22,7 +22,7 @@ The hosted GitHub Pages site does **not** need a `schedules.json` file.
 
 PDF parsing happens in the browser. PDF.js is loaded from jsDelivr only when a user adds a PDF; the selected PDF itself is not uploaded by the app.
 
-Nicknames, pins, accent theme, notification settings, and muted bells are device-specific local preferences. They are **not** included when sharing `schedules.json`.
+Nicknames, pins, color theme, notification settings, and muted bells are device-specific local preferences. They are **not** included when sharing `schedules.json`.
 
 ## People personalization
 
@@ -34,18 +34,18 @@ Open **Settings → People** to:
 
 Pinned people appear first. In **Show everyone**, pinned people are kept at the top even if one is currently in class.
 
-## Appearance
+## Themes
 
-Open **Settings → Appearance** to choose:
+Open **Settings → Themes** to choose light/dark mode and a full color theme:
 
 - Light or Dark mode
-- Blue
-- Violet
+- Ocean
+- Lavender
 - Rose
-- Mint
-- Orange
+- Forest
+- Sunset
 
-Appearance settings are remembered locally on that device.
+Theme settings are remembered locally on that device.
 
 ## Notifications
 
@@ -84,7 +84,7 @@ Folder: / (root)
 
 ## Updating an existing install
 
-v7 uses versioned files and `whos-free-shell-v7`, so previous installs should update automatically after GitHub Pages redeploys.
+v8 uses versioned files and `whos-free-shell-v8`, so previous installs should update automatically after GitHub Pages redeploys.
 
 If a device still shows an older version, close the page/Home Screen app completely and reopen it.
 

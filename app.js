@@ -114,6 +114,20 @@
     }
   }
 
+  function syncThemeMeta() {
+    // Match Safari/PWA chrome to the currently selected full theme.
+    requestAnimationFrame(() => {
+      const background = getComputedStyle(els.root).getPropertyValue("--bg").trim();
+      if (background) els.themeMeta.setAttribute("content", background);
+    });
+  }
+
+  function animateThemeSurfaceChange() {
+    if (!canAnimate()) return;
+    const surfaces = document.querySelectorAll(".control-bar, .people-panel, .detail-panel");
+    window.gsap.fromTo(surfaces, { opacity: 0.96, scale: 0.998 }, { opacity: 1, scale: 1, duration: 0.22, stagger: 0.015, ease: "power1.out", clearProps: "opacity,transform" });
+  }
+
   function applyTheme(theme) {
     state.theme = theme;
     els.root.dataset.theme = theme;
@@ -121,8 +135,8 @@
     els.darkThemeButton?.classList.toggle("active", theme === "dark");
     els.lightThemeButton?.setAttribute("aria-pressed", String(theme === "light"));
     els.darkThemeButton?.setAttribute("aria-pressed", String(theme === "dark"));
-    els.themeMeta.setAttribute("content", theme === "light" ? "#F3F6FA" : "#0A0F18");
     saveTheme(theme);
+    syncThemeMeta();
   }
 
   function applyAccentTheme(theme, animate = true) {
@@ -130,6 +144,8 @@
     state.accentTheme = next;
     els.root.dataset.accentTheme = next;
     saveAccentTheme(next);
+    syncThemeMeta();
+    if (animate) animateThemeSurfaceChange();
 
     if (els.colorThemeGrid) {
       for (const button of els.colorThemeGrid.querySelectorAll("[data-color-theme]")) {
@@ -1886,7 +1902,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=7", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=8", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
