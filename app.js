@@ -38,6 +38,7 @@
   const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
   const ACCENT_THEMES = new Set(["blue", "violet", "rose", "mint", "orange"]);
   const BREAK_THRESHOLD_MINUTES = 10;
+  const APP_URL = "https://xander444.github.io/Whos-Free/";
 
   const els = {
     root: document.documentElement,
@@ -1222,7 +1223,11 @@
 
   function databaseJsonText() {
     const data = state.hasData ? state.data : { schema_version: 1, people: {} };
-    return `${JSON.stringify(data, null, 2)}\n`;
+    const exportData = {
+      ...data,
+      app_url: APP_URL,
+    };
+    return `${JSON.stringify(exportData, null, 2)}\n`;
   }
 
   function downloadDatabaseFile(file) {
@@ -1239,24 +1244,34 @@
   async function shareSchedules() {
     if (!state.hasData) return;
     const file = new File([databaseJsonText()], "schedules.json", { type: "application/json" });
+    const shareText = `Import this schedules.json into Who's Free?\n${APP_URL}`;
 
     try {
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          title: "Who's Free? schedules",
-          text: "Import this schedules.json into Who's Free?",
-          files: [file],
-        });
-        showToast("Opened the share sheet");
+        try {
+          await navigator.share({
+            title: "Who's Free? schedules",
+            text: shareText,
+            url: APP_URL,
+            files: [file],
+          });
+        } catch (error) {
+          if (error?.name === "AbortError") return;
+          await navigator.share({
+            title: "Who's Free? schedules",
+            text: shareText,
+            files: [file],
+          });
+        }
+        showToast("Opened the share sheet with the app link");
         return;
       }
     } catch (error) {
       if (error?.name === "AbortError") return;
-      // Fall through to a normal file download if the share sheet fails.
     }
 
     downloadDatabaseFile(file);
-    showToast("Downloaded schedules.json — send that file to your friend");
+    showToast("Downloaded schedules.json — the Who's Free? link is included in the file");
   }
 
   async function handleLocalScheduleFile(event) {

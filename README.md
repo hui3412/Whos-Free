@@ -95,3 +95,13 @@ GSAP 3.13.0 is loaded from jsDelivr and is used only for small UI transitions. T
 ## Sharing
 
 The **Share schedules.json** button shares/downloads only the schedule database. Device-specific preferences such as nicknames, pins, theme, notification settings, muted bells, and notification history are not included.
+
+## v9 changes
+
+- The browser PDF parser now recognizes Marianopolis Omnivox schedules in **English or French**.
+  - Weekdays such as `Monday` / `Lundi`, `Tuesday` / `Mardi`, `Wednesday` / `Mercredi`, `Thursday` / `Jeudi`, and `Friday` / `Vendredi` are normalized to the same internal weekday names.
+  - Room labels accept English `Classroom` plus French forms such as `Local`, `Classe`, and `Salle de classe`.
+  - Section labels accept `sec.`, `sect.`, and `section`.
+  - Time text accepts both `08:15` and French-style `08 h 15`, including ranges using `à`.
+- Shared `schedules.json` files now carry the Who's Free? website URL (`https://xander444.github.io/Whos-Free/`).
+- On devices with the Web Share API, the share sheet includes the website link alongside the JSON file.

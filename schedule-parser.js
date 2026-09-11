@@ -2,11 +2,20 @@
   "use strict";
 
   const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-  const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
-  const EXPLICIT_RANGE_RE = /\b([01]?\d|2[0-3]):([0-5]\d)\s*(?:to|[-–—])\s*([01]?\d|2[0-3]):([0-5]\d)\b/i;
+  const DAY_ALIASES = {
+    Monday: ["Monday", "Mon", "Lundi", "Lun"],
+    Tuesday: ["Tuesday", "Tue", "Tues", "Mardi", "Mar"],
+    Wednesday: ["Wednesday", "Wed", "Mercredi", "Mer"],
+    Thursday: ["Thursday", "Thu", "Thur", "Thurs", "Jeudi", "Jeu"],
+    Friday: ["Friday", "Fri", "Vendredi", "Ven"],
+  };
+  const TIME_RE = /^([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)$/i;
+  const EXPLICIT_RANGE_RE = /\b([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)\s*(?:to|à|a|au|[-–—])\s*([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)\b/i;
   const CODE_RE = /\b([A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{2})\b/i;
-  const SECTION_RE = /\bsec\.\s*(\d+)\b/i;
-  const ROOM_RE = /\bClassroom\s+([A-Z]-\d+)\b/i;
+  const SECTION_RE = /\b(?:sec|sect|section|grp|groupe)\.?\s*(?:n(?:o|º|°)\.?\s*)?(\d+)\b/i;
+  const ROOM_RE = /\b(?:Classroom|Salle(?:\s+de\s+(?:classe|cours))?|Local|Classe)\s*[:#-]?\s*([A-Z]-\d{2,4}[A-Z]?)\b/i;
+  const BARE_ROOM_RE = /^\s*([A-Z]-\d{2,4}[A-Z]?)\s*$/i;
+  const ROOM_LABEL_ONLY_RE = /^\s*(?:Classroom|Salle(?:\s+de\s+(?:classe|cours))?|Local|Classe)\s*:?\s*$/i;
 
   // Kept separate from the app shell so the parser library is downloaded only
   // when someone actually imports a PDF. The PDF itself never leaves the device.
@@ -33,9 +42,51 @@
     return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
   }
 
+  function normalizeTextLabel(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .replace(/[.]+$/, "")
+      .toLowerCase();
+  }
+
   function normalizeTime(value) {
-    const [h, m] = String(value).split(":").map(Number);
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const match = String(value || "").trim().match(TIME_RE);
+    if (!match) return String(value || "");
+    return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
+  }
+
+  function dayMatchesLabel(day, value) {
+    const normalized = normalizeTextLabel(value);
+    return (DAY_ALIASES[day] || []).some(alias => normalizeTextLabel(alias) === normalized);
+  }
+
+  function isRoomLabelOnly(value) {
+    return ROOM_LABEL_ONLY_RE.test(String(value || "").trim());
+  }
+
+  function roomInfoFromLines(lines) {
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = String(lines[index] || "").trim();
+      const labelled = line.match(ROOM_RE);
+      if (labelled) return { code: labelled[1].toUpperCase(), lineIndex: index };
+
+      if (isRoomLabelOnly(line) && index + 1 < lines.length) {
+        const next = String(lines[index + 1] || "").trim().match(BARE_ROOM_RE);
+        if (next) return { code: next[1].toUpperCase(), lineIndex: index + 1 };
+      }
+    }
+
+    const joined = lines.join("\n");
+    const joinedMatch = joined.match(ROOM_RE);
+    if (joinedMatch) {
+      const code = joinedMatch[1].toUpperCase();
+      const lineIndex = Math.max(0, lines.findIndex(line => String(line).toUpperCase().includes(code)));
+      return { code, lineIndex };
+    }
+
+    return { code: null, lineIndex: -1 };
   }
 
   function multiplyMatrices(a, b) {
@@ -327,8 +378,10 @@
   function findDayColumns(items, rects) {
     const dayItems = {};
     for (const day of DAYS) {
-      const matches = items.filter(item => item.text === day);
-      if (!matches.length) throw new Error(`Could not locate the ${day} column. Make sure this is a Marianopolis Omnivox schedule PDF.`);
+      const matches = items.filter(item => dayMatchesLabel(day, item.text));
+      if (!matches.length) {
+        throw new Error("Could not locate all weekday columns. Make sure this is an English or French Marianopolis Omnivox schedule PDF.");
+      }
       dayItems[day] = matches.sort((a, b) => a.y0 - b.y0)[0];
     }
 
@@ -404,22 +457,19 @@
     const joined = lines.join("\n");
     const codeMatch = joined.match(CODE_RE);
     const sectionMatch = joined.match(SECTION_RE);
-    const roomMatch = joined.match(ROOM_RE);
     const rangeMatch = joined.match(EXPLICIT_RANGE_RE);
+    const roomInfo = roomInfoFromLines(lines);
     const codeIndex = lines.findIndex(line => CODE_RE.test(line));
     const titleLines = codeIndex >= 0 ? lines.slice(0, codeIndex) : lines.slice(0, 1);
     const title = titleLines.join(" ").trim();
 
     let instructor = null;
-    if (roomMatch) {
-      const roomLineIndex = lines.findIndex(line => ROOM_RE.test(line));
-      if (roomLineIndex >= 0) {
-        for (const line of lines.slice(roomLineIndex + 1)) {
-          if (line.toLowerCase() === "classroom") continue;
-          if (EXPLICIT_RANGE_RE.test(line)) continue;
-          instructor = line;
-          break;
-        }
+    if (roomInfo.lineIndex >= 0) {
+      for (const rawLine of lines.slice(roomInfo.lineIndex + 1)) {
+        const line = String(rawLine || "").trim();
+        if (!line || isRoomLabelOnly(line) || BARE_ROOM_RE.test(line) || EXPLICIT_RANGE_RE.test(line)) continue;
+        instructor = line;
+        break;
       }
     }
 
@@ -427,7 +477,7 @@
       course: title || null,
       course_code: codeMatch ? codeMatch[1].toUpperCase() : null,
       section: sectionMatch ? sectionMatch[1] : null,
-      room: roomMatch ? roomMatch[1].toUpperCase() : null,
+      room: roomInfo.code,
       instructor,
     };
 
@@ -605,8 +655,14 @@
 
         let score = 20;
         if (SECTION_RE.test(joined)) score += 7;
-        if (ROOM_RE.test(joined)) score += 7;
-        if (lines.some(line => !CODE_RE.test(line) && !SECTION_RE.test(line) && !ROOM_RE.test(line) && line.toLowerCase() !== "classroom")) score += 4;
+        if (ROOM_RE.test(joined) || roomInfoFromLines(lines).code) score += 7;
+        if (lines.some(line =>
+          !CODE_RE.test(line) &&
+          !SECTION_RE.test(line) &&
+          !ROOM_RE.test(line) &&
+          !BARE_ROOM_RE.test(String(line).trim()) &&
+          !isRoomLabelOnly(line)
+        )) score += 4;
         score += Math.min(lines.length, 7);
         score -= Math.abs((height / rowHeight) - Math.round(height / rowHeight)) * 7;
         score -= (height / rowHeight) * 0.25;
@@ -791,7 +847,7 @@
 
   globalThis.WhosFreeParser = {
     parseSchedulePdf,
-    version: "browser-parser-2",
+    version: "browser-parser-3-bilingual",
     // Exposed for deterministic local tests; the app UI does not use these.
     __test: { parseScheduleModel, parseClassLines, groupTextLines, extractClasses },
   };
