@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
   <div class="app-shell">
@@ -164,7 +164,7 @@
           <div id="exportPeopleList" class="export-people-list"></div>
           <button id="generateCodeButton" class="primary-button" type="button">Generate code</button>
           <label class="field-group share-code-field"><span>Export code</span><textarea id="exportCodeOutput" rows="5" readonly spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="exportCodeStatus"></textarea></label>
-          <p class="share-code-note">Anyone with this code can import the selected schedules. Copy the full code when sending it, and have your friend open <a href="https://hui3412.github.io/Whos-Free/">this app</a> to import it.</p>
+          <p class="share-code-note">Anyone with this code can import the selected schedules. The shorter code uses Unicode characters. Copy the full code when sending it, and have your friend open <a href="https://hui3412.github.io/Whos-Free/">this app</a> to import it.</p>
           <div id="exportCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
           <div class="modal-actions">
             <button id="copyCodeButton" class="secondary-button" type="button" disabled>Copy code</button>
@@ -173,7 +173,7 @@
         </div>
         <div id="codeImportPanel" class="share-code-panel" hidden>
           <h4>Import a friend’s schedules</h4>
-          <p>Paste the full code. People already stored under the same name are skipped; your existing schedules stay as they are.</p>
+          <p>Paste the full code, including its special characters. Older codes need a fresh export. People already stored under the same name are skipped; your existing schedules stay as they are.</p>
           <label class="field-group share-code-field"><span>Code from your friend</span><textarea id="importCodeInput" rows="5" maxlength="1800000" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></label>
           <div id="importCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
           <div class="modal-actions">
@@ -303,10 +303,10 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=14" defer></script>
-  <script src="schedule-image-parser.js?v=14" defer></script>
-  <script src="schedule-availability.js?v=14" defer></script>
-  <script src="schedule-share-code.js?v=14" defer></script>
-  <script src="app.js?v=14" defer></script>
+  <script src="schedule-parser.js?v=15" defer></script>
+  <script src="schedule-image-parser.js?v=15" defer></script>
+  <script src="schedule-availability.js?v=15" defer></script>
+  <script src="schedule-share-code.js?v=15" defer></script>
+  <script src="app.js?v=15" defer></script>
 </body>
 </html>
