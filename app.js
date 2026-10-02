@@ -39,7 +39,7 @@
   const PEOPLE_PREFERENCES_KEY = "whos-free-people-preferences-v1";
   const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
   const ACCENT_THEMES = new Set(["blue", "violet", "rose", "mint", "orange"]);
-  const BREAK_THRESHOLD_MINUTES = 10;
+  const BREAK_THRESHOLD_MINUTES = window.WhosFreeAvailability.PASSING_MINUTES;
   const APP_URL = "https://xander444.github.io/Whos-Free/";
 
   const els = {
@@ -328,28 +328,9 @@
   }
 
   function breakEventsForPerson(name, day) {
-    const classes = classesForDay(name, day);
-    const breaks = [];
-    let current = classes[0];
-    for (let index = 0; index < classes.length - 1; index += 1) {
-      const next = classes[index + 1];
-      const start = toMinutes(current.end);
-      const end = toMinutes(next.start);
-      const duration = end - start;
-      if (duration > BREAK_THRESHOLD_MINUTES) {
-        breaks.push({
-          name,
-          day,
-          start: current.end,
-          end: next.start,
-          duration,
-          afterClass: current,
-          beforeClass: next,
-        });
-      }
-      if (toMinutes(next.end) > toMinutes(current.end)) current = next;
-    }
-    return breaks;
+    return window.WhosFreeAvailability.realBreaks(classesForDay(name, day)).map(gap => ({
+      ...gap, name, day, start: gap.afterClass.end, end: gap.beforeClass.start,
+    }));
   }
 
   function groupedBreaksStartingNow(now = new Date()) {
@@ -801,9 +782,13 @@
     return null;
   }
 
+  function minuteTime(minute) {
+    return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+  }
+
   function isFree(name, day, minute) {
     if (!ALL_DAYS.includes(day)) return true;
-    return currentClass(name, day, minute) === null;
+    return window.WhosFreeAvailability.isFree(classesForDay(name, day), minute);
   }
 
   function previousClasses(name, day, minute) {
@@ -1055,11 +1040,12 @@
         const end = toMinutes(reviewValue(card, "end"));
         if (occupiedUntil !== null && start > occupiedUntil) {
           const gap = document.createElement("div");
-          gap.className = "review-break";
+          const passing = start - occupiedUntil <= BREAK_THRESHOLD_MINUTES;
+          gap.className = passing ? "review-passing" : "review-break";
           gap.style.top = `${occupiedUntil - first}px`;
           gap.style.height = `${start - occupiedUntil}px`;
-          gap.textContent = `Break ${start - occupiedUntil} min`;
-          gap.title = `${day} break ${clock(occupiedUntil)}–${clock(start)}`;
+          gap.textContent = `${passing ? "Passing time" : "Break"} ${start - occupiedUntil} min`;
+          gap.title = `${day} ${passing ? "passing time" : "break"} ${clock(occupiedUntil)}–${clock(start)}`;
           track.append(gap);
         }
         const block = document.createElement("button");
@@ -1751,7 +1737,7 @@
 
   function renderPersonCard(name, day, minute) {
     const busyClass = currentClass(name, day, minute);
-    const busy = Boolean(busyClass);
+    const busy = !isFree(name, day, minute);
     const selected = name === state.selectedPerson;
     const pinned = state.pinnedPeople.has(name);
 
@@ -1781,18 +1767,29 @@
 
     const detail = document.createElement("span");
     detail.className = "person-detail";
-    if (busy) {
+    if (busyClass) {
       detail.textContent = classLabel(busyClass);
+    } else if (busy) {
+      const next = nextClassToday(name, day, minute);
+      detail.textContent = `Passing time · next class at ${formatTime(next.start)}`;
     } else {
       const next = nextClassToday(name, day, minute);
       detail.textContent = next ? `Next ${formatTime(next.start)} · ${classLabel(next)}` : "No more classes today";
     }
 
     copy.append(personName, detail);
+    if (busy) {
+      const times = document.createElement("span");
+      times.className = "person-availability";
+      const upcoming = window.WhosFreeAvailability.nextFreePeriod(classesForDay(name, day), minute);
+      const nextLabel = upcoming.afterClasses ? "Free after classes at" : "Next break starts at";
+      times.textContent = `${busyClass ? `This class ends at ${formatTime(busyClass.end)}\n` : ""}${nextLabel} ${formatTime(minuteTime(upcoming.start))}`;
+      copy.append(times);
+    }
 
     const badge = document.createElement("span");
     badge.className = `status-badge ${busy ? "busy" : "free"}`;
-    badge.textContent = busy ? `IN CLASS\nuntil ${formatTime(busyClass.end)}` : "FREE";
+    badge.textContent = busyClass ? "IN CLASS" : busy ? "PASSING\nTIME" : "FREE";
     badge.style.whiteSpace = "pre-line";
 
     button.append(dot, copy, badge);
@@ -1927,7 +1924,7 @@
     }
 
     const current = currentClass(name, day, minute);
-    const busy = Boolean(current);
+    const busy = !isFree(name, day, minute);
     const previous = previousClasses(name, day, minute);
     const nextToday = nextClassToday(name, day, minute);
 
@@ -1942,25 +1939,35 @@
 
     const badge = document.createElement("span");
     badge.className = `status-badge ${busy ? "busy" : "free"}`;
-    badge.textContent = busy ? "IN CLASS" : "FREE";
+    badge.textContent = current ? "IN CLASS" : busy ? "PASSING TIME" : "FREE";
     statusRow.append(badge);
 
-    if (busy) {
+    if (current) {
       const until = document.createElement("span");
       until.className = "until-copy";
-      until.textContent = `until ${formatTime(current.end)}`;
+      until.textContent = `This class ends at ${formatTime(current.end)}`;
       statusRow.append(until);
     }
 
     header.append(nameEl, statusRow);
     els.detailPanel.append(header, timelineCard(name, day, minute));
 
-    if (busy) {
+    if (current) {
       els.detailPanel.append(detailCard(
         "Current class",
         `${formatTime(current.start)}–${formatTime(current.end)}`,
         classLabel(current),
         "busy"
+      ));
+    }
+
+    const upcomingBreak = window.WhosFreeAvailability.nextFreePeriod(classesForDay(name, day), minute);
+    if (upcomingBreak) {
+      els.detailPanel.append(detailCard(
+        upcomingBreak.afterClasses ? "Free after classes" : "Next break",
+        `${upcomingBreak.afterClasses ? "Free after classes at" : "Next break starts at"} ${formatTime(minuteTime(upcomingBreak.start))}`,
+        upcomingBreak.afterClasses ? "No more classes today after this time." : `Until ${formatTime(minuteTime(upcomingBreak.end))} · ${upcomingBreak.end - upcomingBreak.start} min`,
+        "free"
       ));
     }
 
@@ -2159,7 +2166,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=12", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=13", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

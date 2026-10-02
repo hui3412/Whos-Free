@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <div class="app-shell">
@@ -129,7 +129,7 @@
       <section id="imageReview" class="schedule-action-section image-review" aria-labelledby="imageReviewTitle" hidden>
         <div class="section-kicker">Review</div>
         <h3 id="imageReviewTitle" tabindex="-1">Edit the weekly schedule</h3>
-        <p>Select a busy block in the grid to edit its day, times or wording below. Use a day’s + button to add a block. Green gaps show breaks between busy times; empty time is free. Labels and course details are optional. Compare detected times with the picture before saving.</p>
+        <p>Select a busy block in the grid to edit its day, times or wording below. Use a day’s + button to add a block. Green gaps show breaks longer than 10 minutes. Gaps of 10 minutes or less are passing time between classes. Labels and course details are optional. Compare detected times with the picture before saving.</p>
         <details><summary>Show the original picture</summary><img id="imageReviewPreview" alt="Original schedule for comparison"></details>
         <label class="field-group review-name"><span>Person's name</span><input id="imageReviewName" type="text" maxlength="120" autocomplete="off" required></label>
         <div class="review-grid-scroll" tabindex="0" aria-label="Weekly schedule. Scroll horizontally for more days."><div id="reviewGrid" class="review-grid"></div></div>
@@ -270,8 +270,9 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=12" defer></script>
-  <script src="schedule-image-parser.js?v=12" defer></script>
-  <script src="app.js?v=12" defer></script>
+  <script src="schedule-parser.js?v=13" defer></script>
+  <script src="schedule-image-parser.js?v=13" defer></script>
+  <script src="schedule-availability.js?v=13" defer></script>
+  <script src="app.js?v=13" defer></script>
 </body>
 </html>

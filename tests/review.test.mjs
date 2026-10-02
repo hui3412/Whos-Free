@@ -21,6 +21,7 @@ test("picture review validates, saves corrections and preserves data on cancel",
   const el = id => window.document.getElementById(id);
   const stored = () => JSON.parse(window.localStorage.getItem("whos-free-local-schedules") || "null");
   try {
+    window.eval(fs.readFileSync(new URL("../schedule-availability.js", import.meta.url), "utf8"));
     window.eval(fs.readFileSync(new URL("../app.js", import.meta.url), "utf8"));
     await tick();
     Object.defineProperty(el("scheduleImageInput"), "files", { value: [{ name: "test.png" }], configurable: true });

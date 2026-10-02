@@ -2441,3 +2441,6 @@ input[type="time"],
 .review-grid-block:focus-visible { outline: 3px solid #fff; z-index: 2; }
 .review-break { color: #baf1ca; background: #16442c; pointer-events: none; }
 .review-class[hidden] { display: none; }
+
+.person-availability { display: block; margin-top: 5px; font-size: 0.79rem; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; }
+.review-passing { position: absolute; left: 3px; right: 3px; box-sizing: border-box; overflow: hidden; color: var(--muted); background: var(--input); font-size: 9px; pointer-events: none; }
