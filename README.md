@@ -2,7 +2,7 @@
 
 This fork adds:
 
-- On-device recognition of schedule pictures (JPG, PNG and WebP), without uploading them to an OCR server.
+- On-device recognition of schedule pictures (JPG, PNG and WebP), without uploading them to an OCR server. (on device OCR)
 - An editable weekly grid to correct detected wording, days and times before saving.
 - Manual schedule entry without picture recognition.
 - An Edit button for saved schedules.
