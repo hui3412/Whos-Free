@@ -1,3 +1,16 @@
+## My additions
+
+This fork adds:
+
+- On-device recognition of schedule pictures (JPG, PNG and WebP), without uploading them to an OCR server.
+- An editable weekly grid to correct detected wording, days and times before saving.
+- Manual schedule entry without picture recognition.
+- An Edit button for saved schedules.
+- Break detection based on busy times, without requiring recognized course names or codes.
+- Picture-cropping instructions to keep the grid borders, time labels and day headings visible.
+
+Recognition can make mistakes. Check the detected busy times before saving.
+
 # Who's Free? — Web App v8
 
 A privacy-first static web app for comparing Marianopolis schedules.
