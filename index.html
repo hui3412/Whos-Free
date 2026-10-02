@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
   <div class="app-shell">
@@ -150,6 +150,39 @@
         <div id="parserStatus" class="parser-status" aria-live="polite"></div>
       </section>
 
+      <section class="schedule-action-section" aria-labelledby="shareCodeTitle">
+        <div class="section-kicker">Send schedules</div>
+        <h3 id="shareCodeTitle">Share with a code</h3>
+        <p>Export selected schedules as a code you can send in a message. Your friend can import it here. All schedule data is inside the code; nothing is stored in the cloud.</p>
+        <div class="modal-actions database-actions">
+          <button id="exportSchedulesButton" class="secondary-button" type="button">Export</button>
+          <button id="importCodeButton" class="secondary-button" type="button">Import</button>
+        </div>
+        <div id="codeExportPanel" class="share-code-panel" hidden>
+          <h4>Choose schedules to export</h4>
+          <label class="share-selection"><input id="selectAllSchedules" type="checkbox"><span>Select all</span></label>
+          <div id="exportPeopleList" class="export-people-list"></div>
+          <button id="generateCodeButton" class="primary-button" type="button">Generate code</button>
+          <label class="field-group share-code-field"><span>Export code</span><textarea id="exportCodeOutput" rows="5" readonly spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="exportCodeStatus"></textarea></label>
+          <p class="share-code-note">Anyone with this code can import the selected schedules. Copy the full code when sending it, and have your friend open <a href="https://hui3412.github.io/Whos-Free/">this app</a> to import it.</p>
+          <div id="exportCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
+          <div class="modal-actions">
+            <button id="copyCodeButton" class="secondary-button" type="button" disabled>Copy code</button>
+            <button id="closeExportButton" class="secondary-button" type="button">Done</button>
+          </div>
+        </div>
+        <div id="codeImportPanel" class="share-code-panel" hidden>
+          <h4>Import a friend’s schedules</h4>
+          <p>Paste the full code. People already stored under the same name are skipped; your existing schedules stay as they are.</p>
+          <label class="field-group share-code-field"><span>Code from your friend</span><textarea id="importCodeInput" rows="5" maxlength="1800000" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></label>
+          <div id="importCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
+          <div class="modal-actions">
+            <button id="decodeCodeButton" class="primary-button" type="button">Import schedules</button>
+            <button id="closeImportButton" class="secondary-button" type="button">Done</button>
+          </div>
+        </div>
+      </section>
+
       <section class="schedule-action-section" aria-labelledby="databaseTitle">
         <div class="section-kicker">Database</div>
         <h3 id="databaseTitle">Import or share schedules.json</h3>
@@ -270,9 +303,10 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=13" defer></script>
-  <script src="schedule-image-parser.js?v=13" defer></script>
-  <script src="schedule-availability.js?v=13" defer></script>
-  <script src="app.js?v=13" defer></script>
+  <script src="schedule-parser.js?v=14" defer></script>
+  <script src="schedule-image-parser.js?v=14" defer></script>
+  <script src="schedule-availability.js?v=14" defer></script>
+  <script src="schedule-share-code.js?v=14" defer></script>
+  <script src="app.js?v=14" defer></script>
 </body>
 </html>

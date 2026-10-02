@@ -5,12 +5,12 @@ const fs = require("node:fs");
 
 test("OCR assets are cached locally and missing assets never receive HTML", async () => {
   const listeners = {}, stores = new Map();
-  let fetches = 0, offline = false;
+  let fetches = 0, offline = false, shell = [];
   const caches = {
     async open(name) {
       if (!stores.has(name)) stores.set(name, new Map());
       const store = stores.get(name);
-      return { match: async request => store.get(request.url), put: async (request, response) => store.set(request.url, response), addAll: async () => {} };
+      return { match: async request => store.get(request.url), put: async (request, response) => store.set(request.url, response), addAll: async assets => { shell = [...assets]; } };
     },
     keys: async () => [...stores.keys()],
     delete: async name => stores.delete(name),
@@ -18,6 +18,10 @@ test("OCR assets are cached locally and missing assets never receive HTML", asyn
   };
   const context = vm.createContext({ URL, Response, caches, clients: { claim() {} }, self: { location: { origin: "https://example.test" }, addEventListener: (name, handler) => { listeners[name] = handler; }, skipWaiting() {} }, fetch: async () => { fetches++; if (offline) throw new Error("offline"); return new Response("local OCR asset"); } });
   vm.runInContext(fs.readFileSync(require("node:path").join(__dirname, "../service-worker.js"), "utf8"), context);
+  let installation;
+  listeners.install({ waitUntil: promise => { installation = promise; } });
+  await installation;
+  assert.ok(shell.includes("./schedule-share-code.js?v=14"), "share-code support must be cached for offline use");
   function request(url, mode = "cors") {
     let result;
     listeners.fetch({ request: { url, mode, method: "GET" }, respondWith: promise => { result = promise; } });

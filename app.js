@@ -18,6 +18,7 @@
     loadError: null,
     isParsing: false,
     pendingImage: null,
+    codeMode: null,
     imagePreviewUrl: null,
     notificationsEnabled: false,
     mutedPeople: new Set(),
@@ -40,7 +41,7 @@
   const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
   const ACCENT_THEMES = new Set(["blue", "violet", "rose", "mint", "orange"]);
   const BREAK_THRESHOLD_MINUTES = window.WhosFreeAvailability.PASSING_MINUTES;
-  const APP_URL = "https://xander444.github.io/Whos-Free/";
+  const APP_URL = "https://hui3412.github.io/Whos-Free/";
 
   const els = {
     root: document.documentElement,
@@ -71,6 +72,22 @@
     parserStatus: document.getElementById("parserStatus"),
     importSchedulesButton: document.getElementById("importSchedulesButton"),
     shareSchedulesButton: document.getElementById("shareSchedulesButton"),
+    exportSchedulesButton: document.getElementById("exportSchedulesButton"),
+    importCodeButton: document.getElementById("importCodeButton"),
+    codeExportPanel: document.getElementById("codeExportPanel"),
+    exportPeopleList: document.getElementById("exportPeopleList"),
+    selectAllSchedules: document.getElementById("selectAllSchedules"),
+    generateCodeButton: document.getElementById("generateCodeButton"),
+    exportCodeOutput: document.getElementById("exportCodeOutput"),
+    copyCodeButton: document.getElementById("copyCodeButton"),
+    exportCodeStatus: document.getElementById("exportCodeStatus"),
+    closeExportButton: document.getElementById("closeExportButton"),
+    codeImportPanel: document.getElementById("codeImportPanel"),
+    importCodeInput: document.getElementById("importCodeInput"),
+    decodeCodeButton: document.getElementById("decodeCodeButton"),
+    importCodeStatus: document.getElementById("importCodeStatus"),
+    closeImportButton: document.getElementById("closeImportButton"),
+
     peopleManagerCount: document.getElementById("peopleManagerCount"),
     peopleManagerList: document.getElementById("peopleManagerList"),
     removeSchedulesButton: document.getElementById("removeSchedulesButton"),
@@ -1483,6 +1500,112 @@
     showToast("Downloaded schedules.json — the Who's Free? link is included in the file");
   }
 
+  function codeStatus(element, message, tone = "") {
+    element.textContent = message;
+    element.dataset.tone = tone;
+  }
+
+  function exportSelectionChanged() {
+    const inputs = [...els.exportPeopleList.querySelectorAll("input")];
+    const selected = inputs.filter(input => input.checked).length;
+    els.selectAllSchedules.checked = selected > 0 && selected === inputs.length;
+    els.selectAllSchedules.indeterminate = selected > 0 && selected < inputs.length;
+    els.exportCodeOutput.value = "";
+    els.copyCodeButton.disabled = true;
+    codeStatus(els.exportCodeStatus, `${selected} schedule${selected === 1 ? "" : "s"} selected.`);
+  }
+
+  function closeCodePanels() {
+    if (state.isParsing) return;
+    state.codeMode = null;
+    els.codeExportPanel.hidden = true;
+    els.codeImportPanel.hidden = true;
+    els.exportCodeOutput.value = "";
+    els.importCodeInput.value = "";
+    updateScheduleModal();
+  }
+
+  function openCodePanel(mode) {
+    if (state.isParsing || state.pendingImage || state.codeMode) return;
+    state.codeMode = mode;
+    els.codeExportPanel.hidden = mode !== "export";
+    els.codeImportPanel.hidden = mode !== "import";
+    if (mode === "export") {
+      els.exportPeopleList.replaceChildren();
+      for (const name of Object.keys(peopleMap()).sort(comparePeopleNames)) {
+        const label = document.createElement("label");
+        label.className = "share-selection";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.dataset.person = name;
+        input.addEventListener("change", exportSelectionChanged);
+        const caption = document.createElement("span");
+        caption.textContent = displayName(name) === name ? name : `${displayName(name)} (${name})`;
+        label.append(input, caption);
+        els.exportPeopleList.append(label);
+      }
+      exportSelectionChanged();
+      els.selectAllSchedules.focus();
+    } else {
+      els.importCodeInput.value = "";
+      codeStatus(els.importCodeStatus, "");
+      els.importCodeInput.focus();
+    }
+    updateScheduleModal();
+  }
+
+  async function generateShareCode() {
+    if (state.isParsing || state.codeMode !== "export") return;
+    const names = [...els.exportPeopleList.querySelectorAll("input:checked")].map(input => input.dataset.person);
+    if (!names.length) { codeStatus(els.exportCodeStatus, "Select at least one schedule to export.", "error"); return; }
+    state.isParsing = true;
+    updateScheduleModal();
+    codeStatus(els.exportCodeStatus, "Creating the code on this device…");
+    try {
+      const people = Object.fromEntries(names.map(name => [name, peopleMap()[name]]));
+      const code = await window.WhosFreeShareCode.encode({ people });
+      els.exportCodeOutput.value = code;
+      codeStatus(els.exportCodeStatus, `Code ready for ${names.length} schedule${names.length === 1 ? "" : "s"} · ${code.length.toLocaleString()} characters. Copy it and send it to your friend.`, "success");
+    } catch (error) {
+      els.exportCodeOutput.value = "";
+      codeStatus(els.exportCodeStatus, error.message || "The code could not be created.", "error");
+    } finally { state.isParsing = false; updateScheduleModal(); }
+  }
+
+  async function copyShareCode() {
+    if (!els.exportCodeOutput.value || state.isParsing) return;
+    try {
+      await navigator.clipboard.writeText(els.exportCodeOutput.value);
+      codeStatus(els.exportCodeStatus, "Code copied. Paste it into your message.", "success");
+    } catch {
+      els.exportCodeOutput.focus();
+      els.exportCodeOutput.select();
+      codeStatus(els.exportCodeStatus, "Select and copy the code above, then paste it into your message.");
+    }
+  }
+
+  async function importShareCode() {
+    if (state.isParsing || state.codeMode !== "import") return;
+    if (!els.importCodeInput.value.trim()) { codeStatus(els.importCodeStatus, "Paste a code to import.", "error"); els.importCodeInput.focus(); return; }
+    state.isParsing = true;
+    updateScheduleModal();
+    codeStatus(els.importCodeStatus, "Opening the code on this device…");
+    try {
+      const imported = await window.WhosFreeShareCode.decode(els.importCodeInput.value);
+      validateData(imported);
+      const result = window.WhosFreeShareCode.merge(state.hasData ? state.data : null, imported);
+      validateData(result.data);
+      let warning = null;
+      if (result.added) {
+        state.data = result.data;
+        warning = await persistCurrentDatabase("Local schedule collection");
+      }
+      codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} already stored.`, warning ? "error" : "success");
+    } catch (error) {
+      codeStatus(els.importCodeStatus, error.message || "The code could not be imported.", "error");
+    } finally { state.isParsing = false; updateScheduleModal(); }
+  }
+
   async function handleLocalScheduleFile(event) {
     const [file] = event.target.files || [];
     if (!file) return;
@@ -1645,7 +1768,7 @@
       removeButton.type = "button";
       removeButton.className = "mini-danger-button";
       removeButton.textContent = "Remove";
-      removeButton.disabled = state.isParsing || Boolean(state.pendingImage);
+      removeButton.disabled = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
       removeButton.setAttribute("aria-label", `Remove ${displayName(name)}`);
       removeButton.addEventListener("click", () => removePerson(name));
 
@@ -1653,7 +1776,7 @@
       editButton.type = "button";
       editButton.className = "secondary-button";
       editButton.textContent = "Edit";
-      editButton.disabled = state.isParsing || Boolean(state.pendingImage);
+      editButton.disabled = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
       editButton.setAttribute("aria-label", `Edit ${displayName(name)}`);
       editButton.addEventListener("click", () => openManualSchedule(name, JSON.parse(JSON.stringify(person))));
       row.append(copy, editButton, removeButton);
@@ -1664,7 +1787,18 @@
   function updateScheduleModal() {
     const peopleCount = Object.keys(peopleMap()).length;
     renderPeopleManager();
-    const importBusy = state.isParsing || Boolean(state.pendingImage);
+    const importBusy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+    els.exportSchedulesButton.disabled = importBusy || peopleCount === 0;
+    els.importCodeButton.disabled = importBusy;
+    els.generateCodeButton.disabled = state.isParsing;
+    els.copyCodeButton.disabled = state.isParsing || !els.exportCodeOutput.value;
+    els.decodeCodeButton.disabled = state.isParsing;
+    els.closeExportButton.disabled = state.isParsing;
+    els.closeImportButton.disabled = state.isParsing;
+    els.importCodeInput.disabled = state.isParsing;
+    els.closeScheduleModal.disabled = Boolean(state.codeMode) && state.isParsing;
+    els.selectAllSchedules.disabled = state.isParsing;
+    els.exportPeopleList.querySelectorAll("input").forEach(input => { input.disabled = state.isParsing; });
     els.addSchedulePdfButton.disabled = importBusy;
     els.addScheduleImageButton.disabled = importBusy;
     els.manualScheduleButton.disabled = importBusy;
@@ -1713,6 +1847,8 @@
   }
 
   function closeScheduleModal() {
+    if (state.codeMode && state.isParsing) return;
+    if (state.codeMode) closeCodePanels();
     els.scheduleModal.hidden = true;
     if (els.settingsModal.hidden) document.body.style.overflow = "";
   }
@@ -2108,6 +2244,17 @@
     els.cancelImageScheduleButton.addEventListener("click", () => { clearImageReview(); setImageStatus("Schedule editing canceled. Nothing was saved.", ""); });
     els.importSchedulesButton.addEventListener("click", chooseScheduleFile);
     els.shareSchedulesButton.addEventListener("click", shareSchedules);
+    els.exportSchedulesButton.addEventListener("click", () => openCodePanel("export"));
+    els.importCodeButton.addEventListener("click", () => openCodePanel("import"));
+    els.selectAllSchedules.addEventListener("change", () => {
+      els.exportPeopleList.querySelectorAll("input").forEach(input => { input.checked = els.selectAllSchedules.checked; });
+      exportSelectionChanged();
+    });
+    els.generateCodeButton.addEventListener("click", generateShareCode);
+    els.copyCodeButton.addEventListener("click", copyShareCode);
+    els.decodeCodeButton.addEventListener("click", importShareCode);
+    els.closeExportButton.addEventListener("click", closeCodePanels);
+    els.closeImportButton.addEventListener("click", closeCodePanels);
     els.removeSchedulesButton.addEventListener("click", removeSchedules);
     els.scheduleFileInput.addEventListener("change", handleLocalScheduleFile);
     els.schedulePdfInput.addEventListener("change", handleSchedulePdfs);
@@ -2166,7 +2313,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=13", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=14", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

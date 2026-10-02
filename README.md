@@ -11,6 +11,7 @@ This fork adds on-device schedule picture recognition and an editable weekly gri
 - **Manual entry:** **Enter schedule manually** opens a blank grid without running recognition. Labels, course codes, rooms and instructor names are optional.
 - **Break detection:** Availability follows occupied times, so unfamiliar course names do not prevent break detection. Athlete and conflict blocks count as busy time. Gaps of 10 minutes or less are passing time, so people remain unavailable between back-to-back classes. Only longer gaps count as breaks. Overlapping busy spans do not create false breaks; unclear or merged entries remain available for correction.
 - **Class and break times:** Cards show **This class ends at**, followed by the next real break’s start time. After the last class, they show when the person becomes free for the day.
+- **Share codes:** **Export** lets you select schedules and copy a self-contained code for messages. **Import** opens a pasted code on the recipient’s device. Codes contain the data, require no cloud storage, and skip people already stored under the same name without replacing existing schedules.
 - **Weekend support:** Saturday and Sunday entries affect availability and next-class details.
 
 ### Using a schedule picture
@@ -21,9 +22,9 @@ Recognition can make mistakes. Compare the detected busy times with the picture 
 
 ### Running this fork
 
-Deploy the updated app files at the repository root, including `schedule-image-parser.js`, `schedule-availability.js` and the complete `assets/ocr/` folder. Use HTTPS hosting such as GitHub Pages, or `http://localhost` for computer testing; opening `index.html` directly from Files may block recognition.
+Deploy the updated app files at the repository root, including `schedule-image-parser.js`, `schedule-availability.js`, `schedule-share-code.js` and the complete `assets/ocr/` folder. Use HTTPS hosting such as GitHub Pages, or `http://localhost` for computer testing; opening `index.html` directly from Files may block recognition.
 
-The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This fork uses the `whos-free-shell-v13` cache; the original deployment and version notes below describe the earlier app.
+The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This fork uses the `whos-free-shell-v14` cache; the original deployment and version notes below describe the earlier app.
 
 Three supplied schedules were checked. Automated tests cover short passing gaps, longer breaks and chains of back-to-back classes. Tests cover detection, corrections, manual entry, validation, cancellation and offline caching. The fork has also been reported working on an iPhone.
 

@@ -2444,3 +2444,12 @@ input[type="time"],
 
 .person-availability { display: block; margin-top: 5px; font-size: 0.79rem; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; }
 .review-passing { position: absolute; left: 3px; right: 3px; box-sizing: border-box; overflow: hidden; color: var(--muted); background: var(--input); font-size: 9px; pointer-events: none; }
+
+.share-code-panel { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.share-code-panel h4 { margin: 0 0 12px; }
+.export-people-list { max-height: 250px; overflow-y: auto; margin-bottom: 14px; }
+.share-selection { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+.share-selection input { flex: 0 0 auto; width: 20px; height: 20px; accent-color: var(--accent); }
+.share-code-field { margin-top: 14px; }
+.share-code-field textarea { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--input); color: var(--text); font: 16px/1.45 ui-monospace, monospace; resize: vertical; overflow-wrap: anywhere; }
+.share-code-note { font-size: 0.8rem; color: var(--muted); }
