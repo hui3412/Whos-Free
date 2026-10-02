@@ -1176,6 +1176,20 @@ input[type="time"]:disabled {
 .parser-status[data-tone="warning"] { color: var(--busy-text); }
 .parser-status[data-tone="error"] { color: color-mix(in srgb, #ef5b5b 78%, var(--text)); }
 
+.image-review[hidden] { display: none; }
+.image-review details { margin: 12px 0; }
+.image-review summary { cursor: pointer; color: var(--accent); }
+.image-review img { display: block; max-width: 100%; height: auto; margin-top: 10px; border-radius: 6px; }
+.review-name { margin: 14px 0; }
+.review-classes { display: grid; gap: 12px; margin-bottom: 14px; }
+.review-class { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.review-class legend { padding: 0 5px; color: var(--muted); font-size: 0.8rem; }
+.review-class .field-group { min-width: 0; }
+.review-class input, .review-class select, .review-name input { width: 100%; min-width: 0; max-width: 100%; min-height: 44px; box-sizing: border-box; }
+.review-class > button { justify-self: start; }
+.review-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
+@media (max-width: 380px) { .review-class { grid-template-columns: minmax(0, 1fr); } }
+
 .database-actions {
   margin-top: 0;
 }
@@ -2413,3 +2427,17 @@ input[type="time"],
     min-width: 0;
   }
 }
+
+/* Weekly review: one pixel per minute, with a horizontally scrollable week. */
+.review-grid-scroll { overflow-x: auto; margin: 16px 0; border: 1px solid var(--border); border-radius: 10px; }
+.review-grid { display: grid; grid-template-columns: 54px repeat(7, minmax(110px, 1fr)); min-width: 850px; }
+.review-time-axis { position: relative; }
+.review-time-axis span { position: absolute; left: 3px; font-size: 11px; color: var(--muted); transform: translateY(-50%); }
+.review-day { border-left: 1px solid var(--border); min-width: 0; }
+.review-day-heading { width: 100%; height: 48px; color: var(--text); background: var(--panel); border: 0; cursor: pointer; font-size: 12px; }
+.review-day-track { position: relative; background: repeating-linear-gradient(to bottom, transparent 0, transparent 59px, var(--border) 59px, var(--border) 60px); }
+.review-grid-block, .review-break { position: absolute; left: 3px; right: 3px; box-sizing: border-box; overflow: hidden; border-radius: 5px; font-size: 11px; padding: 3px; }
+.review-grid-block { color: #fff; background: #2857a7; border: 1px solid #83afff; cursor: pointer; text-align: left; }
+.review-grid-block:focus-visible { outline: 3px solid #fff; z-index: 2; }
+.review-break { color: #baf1ca; background: #16442c; pointer-events: none; }
+.review-class[hidden] { display: none; }

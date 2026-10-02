@@ -17,6 +17,8 @@
     theme: loadTheme(),
     loadError: null,
     isParsing: false,
+    pendingImage: null,
+    imagePreviewUrl: null,
     notificationsEnabled: false,
     mutedPeople: new Set(),
     nicknames: {},
@@ -49,6 +51,19 @@
     settingsButton: document.getElementById("settingsButton"),
     scheduleFileInput: document.getElementById("scheduleFileInput"),
     schedulePdfInput: document.getElementById("schedulePdfInput"),
+    scheduleImageInput: document.getElementById("scheduleImageInput"),
+    addScheduleImageButton: document.getElementById("addScheduleImageButton"),
+    manualScheduleButton: document.getElementById("manualScheduleButton"),
+    reviewGrid: document.getElementById("reviewGrid"),
+    imageParserStatus: document.getElementById("imageParserStatus"),
+    imageReview: document.getElementById("imageReview"),
+    imageReviewName: document.getElementById("imageReviewName"),
+    imageReviewPreview: document.getElementById("imageReviewPreview"),
+    imageReviewClasses: document.getElementById("imageReviewClasses"),
+    imageReviewError: document.getElementById("imageReviewError"),
+    addReviewClassButton: document.getElementById("addReviewClassButton"),
+    saveImageScheduleButton: document.getElementById("saveImageScheduleButton"),
+    cancelImageScheduleButton: document.getElementById("cancelImageScheduleButton"),
     scheduleModal: document.getElementById("scheduleModal"),
     closeScheduleModal: document.getElementById("closeScheduleModal"),
     scheduleStorageStatus: document.getElementById("scheduleStorageStatus"),
@@ -315,8 +330,8 @@
   function breakEventsForPerson(name, day) {
     const classes = classesForDay(name, day);
     const breaks = [];
+    let current = classes[0];
     for (let index = 0; index < classes.length - 1; index += 1) {
-      const current = classes[index];
       const next = classes[index + 1];
       const start = toMinutes(current.end);
       const end = toMinutes(next.start);
@@ -332,12 +347,13 @@
           beforeClass: next,
         });
       }
+      if (toMinutes(next.end) > toMinutes(current.end)) current = next;
     }
     return breaks;
   }
 
   function groupedBreaksStartingNow(now = new Date()) {
-    if (!state.hasData || !WORK_DAYS.includes(now.toLocaleDateString("en-CA", { weekday: "long" }))) return [];
+    if (!state.hasData || !ALL_DAYS.includes(now.toLocaleDateString("en-CA", { weekday: "long" }))) return [];
     const day = now.toLocaleDateString("en-CA", { weekday: "long" });
     const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const due = [];
@@ -550,7 +566,7 @@
 
       const meta = document.createElement("div");
       meta.className = "notification-person-meta";
-      const longBreaks = WORK_DAYS.reduce((count, day) => count + breakEventsForPerson(name, day).length, 0);
+      const longBreaks = ALL_DAYS.reduce((count, day) => count + breakEventsForPerson(name, day).length, 0);
       const parts = [];
       if (nickname) parts.push(name);
       parts.push(pinned ? "Pinned to top" : `${longBreaks} long break${longBreaks === 1 ? "" : "s"}`);
@@ -786,17 +802,17 @@
   }
 
   function isFree(name, day, minute) {
-    if (!WORK_DAYS.includes(day)) return true;
+    if (!ALL_DAYS.includes(day)) return true;
     return currentClass(name, day, minute) === null;
   }
 
   function previousClasses(name, day, minute) {
-    if (!WORK_DAYS.includes(day)) return [];
+    if (!ALL_DAYS.includes(day)) return [];
     return classesForDay(name, day).filter(c => toMinutes(c.end) <= minute);
   }
 
   function nextClassToday(name, day, minute) {
-    if (!WORK_DAYS.includes(day)) return null;
+    if (!ALL_DAYS.includes(day)) return null;
     return classesForDay(name, day).find(c => toMinutes(c.start) > minute) || null;
   }
 
@@ -809,7 +825,7 @@
 
     for (let daysAhead = 0; daysAhead < 8; daysAhead += 1) {
       const candidateDay = ALL_DAYS[(selectedIndex + daysAhead) % 7];
-      if (!WORK_DAYS.includes(candidateDay)) continue;
+      if (!ALL_DAYS.includes(candidateDay)) continue;
 
       for (const c of classesForDay(name, candidateDay)) {
         if (daysAhead === 0 && toMinutes(c.start) <= minute) continue;
@@ -918,6 +934,7 @@
 
     fragment.querySelector(".choose-schedules").addEventListener("click", chooseScheduleFile);
     fragment.querySelector(".add-pdf").addEventListener("click", chooseSchedulePdf);
+    fragment.querySelector(".add-picture").addEventListener("click", chooseScheduleImage);
     els.peopleList.append(fragment);
     renderEmptyDetail();
   }
@@ -941,6 +958,212 @@
       console.warn("showPicker() was unavailable; falling back to click().", error);
     }
     els.schedulePdfInput.click();
+  }
+
+  function chooseScheduleImage() {
+    if (state.isParsing || state.pendingImage) return;
+    els.scheduleImageInput.value = "";
+    els.scheduleImageInput.click();
+  }
+
+  function setImageStatus(message, tone = "working") {
+    els.imageParserStatus.textContent = message;
+    els.imageParserStatus.dataset.tone = tone;
+  }
+
+  function addReviewClass(item = {}) {
+    const card = document.createElement("fieldset");
+    card.className = "review-class";
+    card.dataset.kind = item.kind || "class";
+    if (item.review_warning) card.dataset.warning = item.review_warning;
+    const legend = document.createElement("legend");
+    legend.textContent = item.review_warning || "Edit busy block — only the day and times are required";
+    card.append(legend);
+    for (const [key, label, type] of [["day", "Day", "select"], ["start", "Starts", "time"], ["end", "Ends", "time"], ["course", "Label (optional)", "text"], ["course_code", "Course code", "text"], ["section", "Section", "text"], ["room", "Room", "text"], ["instructor", "Instructor", "text"]]) {
+      const wrapper = document.createElement("label");
+      wrapper.className = "field-group";
+      const caption = document.createElement("span");
+      caption.textContent = label;
+      const input = document.createElement(type === "select" ? "select" : "input");
+      if (type === "select") for (const day of ALL_DAYS) {
+        const option = document.createElement("option");
+        option.value = day;
+        option.textContent = day;
+        input.append(option);
+      }
+      else input.type = type;
+      input.dataset.field = key;
+      input.value = item[key] || (key === "day" ? "Monday" : "");
+      if (["start", "end"].includes(key)) { input.required = true; input.step = "60"; }
+      if (type === "text") input.maxLength = 200;
+      wrapper.append(caption, input);
+      card.append(wrapper);
+    }
+    const remove = document.createElement("button");
+    remove.className = "mini-danger-button";
+    remove.type = "button";
+    remove.textContent = "Remove busy block";
+    remove.addEventListener("click", () => { card.remove(); const first = els.imageReviewClasses.querySelector(".review-class"); if (first) selectReviewCard(first); renderReviewGrid(); });
+    card.append(remove);
+    els.imageReviewClasses.append(card);
+    card.addEventListener("input", renderReviewGrid);
+    card.addEventListener("change", renderReviewGrid);
+    selectReviewCard(card);
+    renderReviewGrid();
+  }
+
+  function reviewValue(card, field) {
+    return card.querySelector(`[data-field="${field}"]`).value;
+  }
+
+  function selectReviewCard(card) {
+    els.imageReviewClasses.querySelectorAll(".review-class").forEach(item => { item.hidden = item !== card; });
+  }
+
+  function renderReviewGrid() {
+    const cards = [...els.imageReviewClasses.querySelectorAll(".review-class")];
+    const valid = cards.filter(card => /^\d{2}:\d{2}$/.test(reviewValue(card, "start")) && /^\d{2}:\d{2}$/.test(reviewValue(card, "end")) && toMinutes(reviewValue(card, "end")) > toMinutes(reviewValue(card, "start")));
+    const first = Math.min(480, ...valid.map(card => Math.floor(toMinutes(reviewValue(card, "start")) / 60) * 60));
+    const last = Math.max(1200, ...valid.map(card => Math.ceil(toMinutes(reviewValue(card, "end")) / 60) * 60));
+    els.reviewGrid.replaceChildren();
+    const axis = document.createElement("div");
+    axis.className = "review-time-axis";
+    const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    for (let time = first; time <= last; time += 60) {
+      const label = document.createElement("span");
+      label.textContent = clock(time);
+      label.style.top = `${time - first + 48}px`;
+      axis.append(label);
+    }
+    els.reviewGrid.append(axis);
+    for (const day of ALL_DAYS) {
+      const column = document.createElement("div");
+      column.className = "review-day";
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "review-day-heading";
+      add.textContent = `${day} +`;
+      add.setAttribute("aria-label", `Add busy block on ${day}`);
+      add.addEventListener("click", () => addReviewClass({ day, start: "08:15", end: "09:35", kind: "busy_block" }));
+      const track = document.createElement("div");
+      track.className = "review-day-track";
+      track.style.height = `${last - first}px`;
+      const entries = valid.filter(card => reviewValue(card, "day") === day).sort((a, b) => toMinutes(reviewValue(a, "start")) - toMinutes(reviewValue(b, "start")));
+      let occupiedUntil = null;
+      for (const card of entries) {
+        const start = toMinutes(reviewValue(card, "start"));
+        const end = toMinutes(reviewValue(card, "end"));
+        if (occupiedUntil !== null && start > occupiedUntil) {
+          const gap = document.createElement("div");
+          gap.className = "review-break";
+          gap.style.top = `${occupiedUntil - first}px`;
+          gap.style.height = `${start - occupiedUntil}px`;
+          gap.textContent = `Break ${start - occupiedUntil} min`;
+          gap.title = `${day} break ${clock(occupiedUntil)}–${clock(start)}`;
+          track.append(gap);
+        }
+        const block = document.createElement("button");
+        block.type = "button";
+        block.className = "review-grid-block";
+        block.style.top = `${start - first}px`;
+        block.style.height = `${end - start}px`;
+        block.textContent = `${card.dataset.warning ? "⚠ " : ""}${clock(start)}–${clock(end)} ${reviewValue(card, "course") || "Busy block"}`;
+        block.title = `${day} ${block.textContent}. ${card.dataset.warning || "Select to edit."}`;
+        block.setAttribute("aria-label", block.title);
+        block.addEventListener("click", () => { selectReviewCard(card); card.scrollIntoView?.({ block: "nearest" }); card.querySelector('[data-field="course"]').focus(); });
+        track.append(block);
+        occupiedUntil = Math.max(occupiedUntil ?? end, end);
+      }
+      column.append(add, track);
+      els.reviewGrid.append(column);
+    }
+  }
+
+  function openManualSchedule(name = "", person = { source_file: "manual", classes: [] }) {
+    if (state.isParsing || state.pendingImage) return;
+    state.pendingImage = { name, person };
+    els.imageReviewName.value = name;
+    els.imageReviewClasses.replaceChildren();
+    els.imageReviewPreview.closest("details").hidden = true;
+    person.classes.forEach(addReviewClass);
+    renderReviewGrid();
+    els.imageReview.hidden = false;
+    openScheduleModal();
+    updateScheduleModal();
+    setImageStatus("Add busy times using a day’s + button. Empty time is free; labels are optional.", "success");
+    els.imageReviewName.focus();
+  }
+
+  function clearImageReview() {
+    state.pendingImage = null;
+    if (state.imagePreviewUrl) URL.revokeObjectURL(state.imagePreviewUrl);
+    state.imagePreviewUrl = null;
+    els.imageReviewPreview.removeAttribute("src");
+    els.imageReviewClasses.replaceChildren();
+    els.imageReview.hidden = true;
+    els.imageReviewError.textContent = "";
+    updateScheduleModal();
+  }
+
+  async function handleScheduleImage(event) {
+    const file = event.target.files?.[0];
+    if (!file || state.isParsing || state.pendingImage) return;
+    if (els.scheduleModal.hidden) openScheduleModal();
+    state.isParsing = true;
+    updateScheduleModal();
+    setImageStatus("Reading the picture on this device…");
+    try {
+      const result = await window.WhosFreeImageParser.parseScheduleImage(file, { onProgress: message => setImageStatus(message) });
+      state.pendingImage = result;
+      state.imagePreviewUrl = URL.createObjectURL(file);
+      els.imageReviewPreview.src = state.imagePreviewUrl;
+      els.imageReviewPreview.closest("details").hidden = false;
+      els.imageReviewName.value = result.name || "";
+      els.imageReviewClasses.replaceChildren();
+      result.person.classes.forEach(addReviewClass);
+      selectReviewCard(els.imageReviewClasses.querySelector(".review-class"));
+      els.imageReview.hidden = false;
+      if (els.scheduleModal.hidden) openScheduleModal();
+      const busyCount = result.person.classes.filter(item => item.kind === "busy_block").length;
+      setImageStatus(`${result.person.classes.length - busyCount} classes${busyCount ? ` and ${busyCount} other busy blocks` : ""} recognized. Check the schedule below before saving.`, "success");
+      document.getElementById("imageReviewTitle").focus();
+    } catch (error) {
+      if (state.pendingImage) clearImageReview();
+      setImageStatus(error.message || "The picture could not be read. Try a clear screenshot.", "error");
+    } finally {
+      state.isParsing = false;
+      event.target.value = "";
+      updateScheduleModal();
+    }
+  }
+
+  async function saveImageSchedule() {
+    if (!state.pendingImage || state.isParsing) return;
+    els.imageReviewError.textContent = "";
+    const name = els.imageReviewName.value.trim();
+    if (!name) { els.imageReviewError.textContent = "Enter the person's name before saving."; els.imageReviewName.focus(); return; }
+    const classes = [...els.imageReviewClasses.querySelectorAll(".review-class")].map(card => ({ ...Object.fromEntries(
+      [...card.querySelectorAll("[data-field]")].map(input => [input.dataset.field, input.value.trim() || null])
+    ), kind: card.dataset.kind || "class" }));
+    // An empty manual schedule represents someone with no busy times.
+    const workingData = state.hasData ? JSON.parse(JSON.stringify(state.data)) : { schema_version: 1, people: {} };
+    const replacement = Object.prototype.hasOwnProperty.call(workingData.people, name);
+    // Define an own property safely even if a person's name is __proto__.
+    Object.defineProperty(workingData.people, name, { value: { source_file: state.pendingImage.person.source_file, classes }, writable: true, enumerable: true, configurable: true });
+    try { validateData(workingData); }
+    catch (error) { els.imageReviewError.textContent = error.message; return; }
+    if (replacement && !window.confirm(`Replace the existing schedule for ${name} with these reviewed classes?`)) return;
+    state.isParsing = true;
+    updateScheduleModal();
+    try {
+      state.data = workingData;
+      state.selectedPerson = name;
+      const warning = await persistCurrentDatabase("Local schedule collection");
+      clearImageReview();
+      setImageStatus(`Saved ${classes.length} schedule entries for ${name} on this device.`, "success");
+      showToast(warning || `Saved ${name}'s schedule`);
+    } catch (error) { els.imageReviewError.textContent = error.message; }
+    finally { state.isParsing = false; updateScheduleModal(); }
   }
 
   function openLocalDatabase() {
@@ -1436,10 +1659,18 @@
       removeButton.type = "button";
       removeButton.className = "mini-danger-button";
       removeButton.textContent = "Remove";
+      removeButton.disabled = state.isParsing || Boolean(state.pendingImage);
       removeButton.setAttribute("aria-label", `Remove ${displayName(name)}`);
       removeButton.addEventListener("click", () => removePerson(name));
 
-      row.append(copy, removeButton);
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "secondary-button";
+      editButton.textContent = "Edit";
+      editButton.disabled = state.isParsing || Boolean(state.pendingImage);
+      editButton.setAttribute("aria-label", `Edit ${displayName(name)}`);
+      editButton.addEventListener("click", () => openManualSchedule(name, JSON.parse(JSON.stringify(person))));
+      row.append(copy, editButton, removeButton);
       els.peopleManagerList.append(row);
     }
   }
@@ -1447,10 +1678,15 @@
   function updateScheduleModal() {
     const peopleCount = Object.keys(peopleMap()).length;
     renderPeopleManager();
-    els.addSchedulePdfButton.disabled = state.isParsing;
-    els.importSchedulesButton.disabled = state.isParsing;
-    els.shareSchedulesButton.disabled = state.isParsing || !state.hasData || peopleCount === 0;
-    els.removeSchedulesButton.disabled = state.isParsing || !state.hasData;
+    const importBusy = state.isParsing || Boolean(state.pendingImage);
+    els.addSchedulePdfButton.disabled = importBusy;
+    els.addScheduleImageButton.disabled = importBusy;
+    els.manualScheduleButton.disabled = importBusy;
+    els.importSchedulesButton.disabled = importBusy;
+    els.shareSchedulesButton.disabled = importBusy || !state.hasData || peopleCount === 0;
+    els.removeSchedulesButton.disabled = importBusy || !state.hasData;
+    els.saveImageScheduleButton.disabled = state.isParsing;
+    els.cancelImageScheduleButton.disabled = state.isParsing;
 
     if (state.hasData) {
       const meta = state.scheduleMeta || {};
@@ -1472,7 +1708,7 @@
           <div>
             <div class="storage-status-label">This device</div>
             <div class="storage-status-value">No schedules stored</div>
-            <div class="storage-status-meta">Add a PDF to create a database automatically, or import schedules.json.</div>
+            <div class="storage-status-meta">Add a schedule picture or PDF, or import schedules.json.</div>
           </div>
         </div>`;
       els.importSchedulesButton.textContent = "Import schedules.json";
@@ -1857,6 +2093,12 @@
     els.breakNotificationToggle.addEventListener("change", handleNotificationToggle);
     els.testNotificationButton.addEventListener("click", sendTestNotification);
     els.addSchedulePdfButton.addEventListener("click", chooseSchedulePdf);
+    els.addScheduleImageButton.addEventListener("click", chooseScheduleImage);
+    els.scheduleImageInput.addEventListener("change", handleScheduleImage);
+    els.manualScheduleButton.addEventListener("click", () => openManualSchedule());
+    els.addReviewClassButton.addEventListener("click", () => addReviewClass({ start: "08:15", end: "09:35", kind: "busy_block" }));
+    els.saveImageScheduleButton.addEventListener("click", saveImageSchedule);
+    els.cancelImageScheduleButton.addEventListener("click", () => { clearImageReview(); setImageStatus("Schedule editing canceled. Nothing was saved.", ""); });
     els.importSchedulesButton.addEventListener("click", chooseScheduleFile);
     els.shareSchedulesButton.addEventListener("click", shareSchedules);
     els.removeSchedulesButton.addEventListener("click", removeSchedules);
@@ -1917,7 +2159,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=8", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=12", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

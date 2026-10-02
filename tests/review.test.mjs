@@ -1,0 +1,108 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { Window } from "happy-dom";
+
+test("picture review validates, saves corrections and preserves data on cancel", async () => {
+  const window = new Window({ url: "http://localhost/Whos-Free/", settings: { disableJavaScriptFileLoading: true, disableCSSFileLoading: true } });
+  window.document.write(fs.readFileSync(new URL("../index.html", import.meta.url), "utf8"));
+  window.setInterval = () => 0;
+  window.matchMedia = () => ({ matches: true, addEventListener() {} });
+  window.confirm = () => true;
+  window.URL.createObjectURL = () => "blob:http://localhost/test";
+  window.URL.revokeObjectURL = () => {};
+  const fixture = { name: "", person: { source_file: "test.png", classes: [
+    { day: "Monday", start: "11:15", end: "12:35", course: "Test course", course_code: "203-SN1-RE", room: "I-216" },
+    { day: "Monday", start: "14:15", end: "14:35", course: "Conflict 1", kind: "busy_block" },
+    { day: "Saturday", start: "11:15", end: "12:05", course: "Weekend course", course_code: "551-121-MS", room: "900" }
+  ] } };
+  window.WhosFreeImageParser = { parseScheduleImage: async () => JSON.parse(JSON.stringify(fixture)) };
+  const tick = () => new Promise(resolve => setTimeout(resolve, 30));
+  const el = id => window.document.getElementById(id);
+  const stored = () => JSON.parse(window.localStorage.getItem("whos-free-local-schedules") || "null");
+  try {
+    window.eval(fs.readFileSync(new URL("../app.js", import.meta.url), "utf8"));
+    await tick();
+    Object.defineProperty(el("scheduleImageInput"), "files", { value: [{ name: "test.png" }], configurable: true });
+    el("scheduleImageInput").dispatchEvent(new window.Event("change"));
+    await tick();
+    assert.equal(window.document.querySelectorAll(".review-class").length, 3);
+    assert.equal(window.document.querySelectorAll('[data-field="day"]')[2].value, "Saturday");
+    assert.equal(stored(), null, "recognition must not save before review");
+    assert.equal(el("reviewGrid").querySelectorAll(".review-day").length, 7);
+    assert.equal(el("reviewGrid").querySelectorAll(".review-grid-block").length, 3);
+    assert.equal(el("reviewGrid").querySelector(".review-break").textContent, "Break 100 min");
+    el("reviewGrid").querySelector(".review-grid-block").click();
+    assert.equal(window.document.querySelector(".review-class").hidden, false);
+    const label = window.document.querySelector('[data-field="course"]');
+    label.value = "Corrected wording";
+    label.dispatchEvent(new window.Event("input", { bubbles: true }));
+    assert.match(el("reviewGrid").querySelector(".review-grid-block").textContent, /Corrected wording/);
+    el("saveImageScheduleButton").click();
+    assert.match(el("imageReviewError").textContent, /name/);
+    assert.equal(stored(), null);
+    el("imageReviewName").value = "Test Student";
+    const end = window.document.querySelector('[data-field="end"]');
+    end.value = "00:00";
+    el("saveImageScheduleButton").click();
+    assert.match(el("imageReviewError").textContent, /invalid start or end/);
+    assert.equal(stored(), null);
+    end.value = "12:35";
+    window.document.querySelector('[data-field="room"]').value = "D-209";
+    el("saveImageScheduleButton").click();
+    await tick();
+    assert.equal(stored().data.people["Test Student"].classes[0].room, "D-209");
+    assert.equal(stored().data.people["Test Student"].classes[1].kind, "busy_block");
+    assert.equal(stored().data.people["Test Student"].classes[2].day, "Saturday");
+    assert.equal(el("imageReview").hidden, true);
+    el("liveToggle").checked = false;
+    el("liveToggle").dispatchEvent(new window.Event("change"));
+    el("daySelect").value = "Saturday";
+    el("daySelect").dispatchEvent(new window.Event("change"));
+    el("timeInput").value = "11:30";
+    el("timeInput").dispatchEvent(new window.Event("change"));
+    assert.equal(el("freeCount").textContent, "0 of 1 free", "Saturday class must count as occupied");
+    el("daySelect").value = "Monday";
+    el("daySelect").dispatchEvent(new window.Event("change"));
+    el("timeInput").value = "14:25";
+    el("timeInput").dispatchEvent(new window.Event("change"));
+    assert.equal(el("freeCount").textContent, "0 of 1 free", "Conflict block must count as occupied");
+    el("timeInput").value = "14:40";
+    el("timeInput").dispatchEvent(new window.Event("change"));
+    assert.equal(el("freeCount").textContent, "1 of 1 free", "Ended conflict must no longer count as occupied");
+    const before = JSON.stringify(stored());
+    el("scheduleImageInput").dispatchEvent(new window.Event("change"));
+    await tick();
+    el("cancelImageScheduleButton").click();
+    assert.equal(JSON.stringify(stored()), before);
+    assert.equal(el("addScheduleImageButton").disabled, false);
+    let ocrCalls = 0;
+    window.WhosFreeImageParser.parseScheduleImage = async () => { ocrCalls++; throw new Error("Manual entry should not run OCR"); };
+    el("manualScheduleButton").click();
+    assert.equal(el("reviewGrid").querySelectorAll(".review-grid-block").length, 0);
+    el("imageReviewName").value = "Manual Person";
+    el("reviewGrid").querySelector('[aria-label="Add busy block on Sunday"]').click();
+    assert.equal(window.document.querySelector('[data-field="day"]').value, "Sunday");
+    const inputs = field => window.document.querySelector(`[data-field="${field}"]`);
+    inputs("start").value = "10:00";
+    inputs("end").value = "12:00";
+    inputs("end").dispatchEvent(new window.Event("input", { bubbles: true }));
+    // A nested occupied block must not introduce a false break inside the longer one.
+    el("addReviewClassButton").click();
+    const nested = [...window.document.querySelectorAll(".review-class")][1];
+    for (const [key, value] of Object.entries({ day: "Sunday", start: "10:30", end: "11:00" })) nested.querySelector(`[data-field="${key}"]`).value = value;
+    nested.dispatchEvent(new window.Event("input", { bubbles: true }));
+    assert.equal(el("reviewGrid").querySelectorAll(".review-break").length, 0);
+    el("saveImageScheduleButton").click();
+    await tick();
+    assert.equal(ocrCalls, 0);
+    assert.equal(stored().data.people["Manual Person"].classes[0].course, null);
+    assert.equal(stored().data.people["Manual Person"].classes[0].end, "12:00");
+    window.document.querySelector('[aria-label="Edit Manual Person"]').click();
+    assert.equal(el("imageReviewName").value, "Manual Person");
+    window.document.querySelector(".review-class .mini-danger-button").click();
+    assert.equal(el("reviewGrid").querySelectorAll(".review-grid-block").length, 1);
+    el("cancelImageScheduleButton").click();
+    assert.equal(stored().data.people["Manual Person"].classes.length, 2);
+  } finally { await window.happyDOM.abort(); }
+});

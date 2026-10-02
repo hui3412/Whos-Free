@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com; connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com; worker-src 'self' blob: https://cdn.jsdelivr.net; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com; connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com; worker-src 'self' blob: https://cdn.jsdelivr.net; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#0A0F18">
   <meta name="description" content="See who's free now and compare Marianopolis schedules. Schedule data stays on your device.">
@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
   <div class="app-shell">
@@ -103,18 +103,44 @@
 
   <input id="scheduleFileInput" class="visually-hidden" type="file" accept=".json,.JSON,application/json">
   <input id="schedulePdfInput" class="visually-hidden" type="file" accept=".pdf,application/pdf" multiple>
+  <input id="scheduleImageInput" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
 
   <div id="scheduleModal" class="modal-backdrop" hidden>
     <section class="schedule-modal panel" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
       <div class="modal-header">
         <div>
           <h2 id="scheduleModalTitle">Schedule data</h2>
-          <p>Your schedule database is stored locally in this browser. Add PDFs, import JSON, or share a copy with a friend.</p>
+          <p>Your schedule database is stored locally in this browser. Add a picture or PDF, import JSON, or share a copy with a friend.</p>
         </div>
         <button id="closeScheduleModal" class="modal-close" type="button" aria-label="Close">×</button>
       </div>
 
       <div id="scheduleStorageStatus" class="storage-status"></div>
+
+      <section class="schedule-action-section" aria-labelledby="addPictureTitle">
+        <div class="section-kicker">From a picture</div>
+        <h3 id="addPictureTitle">Read a schedule screenshot</h3>
+        <p>Crop the picture as tightly as possible around the full timetable. Keep all grid borders, the times on the left, and the weekday headings at the top visible, including any weekend columns. Remove extra space outside the timetable, but don’t cut off any schedule content. Use a clear, upright picture and check the detected times before saving. Your picture stays on this device.</p>
+        <button id="addScheduleImageButton" class="primary-button wide-action" type="button">Add schedule picture</button>
+        <button id="manualScheduleButton" class="secondary-button wide-action" type="button">Enter schedule manually</button>
+        <div id="imageParserStatus" class="parser-status" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="imageReview" class="schedule-action-section image-review" aria-labelledby="imageReviewTitle" hidden>
+        <div class="section-kicker">Review</div>
+        <h3 id="imageReviewTitle" tabindex="-1">Edit the weekly schedule</h3>
+        <p>Select a busy block in the grid to edit its day, times or wording below. Use a day’s + button to add a block. Green gaps show breaks between busy times; empty time is free. Labels and course details are optional. Compare detected times with the picture before saving.</p>
+        <details><summary>Show the original picture</summary><img id="imageReviewPreview" alt="Original schedule for comparison"></details>
+        <label class="field-group review-name"><span>Person's name</span><input id="imageReviewName" type="text" maxlength="120" autocomplete="off" required></label>
+        <div class="review-grid-scroll" tabindex="0" aria-label="Weekly schedule. Scroll horizontally for more days."><div id="reviewGrid" class="review-grid"></div></div>
+        <div id="imageReviewClasses" class="review-classes"></div>
+        <button id="addReviewClassButton" class="secondary-button" type="button">Add busy block</button>
+        <div id="imageReviewError" class="parser-status" data-tone="error" role="alert"></div>
+        <div class="modal-actions review-actions">
+          <button id="saveImageScheduleButton" class="primary-button" type="button">Save schedule</button>
+          <button id="cancelImageScheduleButton" class="secondary-button" type="button">Cancel</button>
+        </div>
+      </section>
 
       <section class="schedule-action-section" aria-labelledby="addScheduleTitle">
         <div class="section-kicker">Add people</div>
@@ -145,7 +171,7 @@
 
       <button id="removeSchedulesButton" class="danger-button remove-all-button" type="button">Remove all local schedules</button>
 
-      <p class="privacy-footnote">PDFs and schedule data stay in this browser. PDF parsing loads the pinned PDF.js library only when you add a PDF; the schedule PDF itself is never uploaded by this app.</p>
+      <p class="privacy-footnote">Pictures, PDFs and schedule data stay in this browser. Picture recognition runs on your device; its language files download from this website the first time and are cached for offline use. PDF parsing loads PDF.js when needed. This app never uploads your schedule files.</p>
     </section>
   </div>
 
@@ -233,8 +259,9 @@
     <div class="data-setup">
       <div class="data-setup-icon" aria-hidden="true">＋</div>
       <h3 class="data-setup-title">Add your first schedule</h3>
-      <p class="data-setup-message">Start with a Marianopolis Omnivox PDF, or import a <strong>schedules.json</strong> file a friend sent you.</p>
+      <p class="data-setup-message">Start with a schedule screenshot or Marianopolis Omnivox PDF, or import a <strong>schedules.json</strong> file a friend sent you.</p>
       <div class="setup-actions">
+        <button class="primary-button add-picture" type="button">Add schedule picture</button>
         <button class="primary-button add-pdf" type="button">Add schedule PDF</button>
         <button class="secondary-button choose-schedules" type="button">Import schedules.json</button>
       </div>
@@ -243,7 +270,8 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=9" defer></script>
-  <script src="app.js?v=9" defer></script>
+  <script src="schedule-parser.js?v=12" defer></script>
+  <script src="schedule-image-parser.js?v=12" defer></script>
+  <script src="app.js?v=12" defer></script>
 </body>
 </html>

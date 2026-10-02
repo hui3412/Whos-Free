@@ -1,20 +1,22 @@
 (() => {
   "use strict";
 
-  const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const DAY_ALIASES = {
     Monday: ["Monday", "Mon", "Lundi", "Lun"],
     Tuesday: ["Tuesday", "Tue", "Tues", "Mardi", "Mar"],
     Wednesday: ["Wednesday", "Wed", "Mercredi", "Mer"],
     Thursday: ["Thursday", "Thu", "Thur", "Thurs", "Jeudi", "Jeu"],
     Friday: ["Friday", "Fri", "Vendredi", "Ven"],
+    Saturday: ["Saturday", "Sat", "Samedi", "Sam"],
+    Sunday: ["Sunday", "Sun", "Dimanche", "Dim"],
   };
   const TIME_RE = /^([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)$/i;
   const EXPLICIT_RANGE_RE = /\b([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)\s*(?:to|à|a|au|[-–—])\s*([01]?\d|2[0-3])\s*(?::|h)\s*([0-5]\d)\b/i;
   const CODE_RE = /\b([A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{2})\b/i;
   const SECTION_RE = /\b(?:sec|sect|section|grp|groupe)\.?\s*(?:n(?:o|º|°)\.?\s*)?(\d+)\b/i;
-  const ROOM_RE = /\b(?:Classroom|Salle(?:\s+de\s+(?:classe|cours))?|Local|Classe)\s*[:#-]?\s*([A-Z]-\d{2,4}[A-Z]?)\b/i;
-  const BARE_ROOM_RE = /^\s*([A-Z]-\d{2,4}[A-Z]?)\s*$/i;
+  const ROOM_RE = /\b(?:Classroom|Salle(?:\s+de\s+(?:classe|cours))?|Local|Classe)\s*[:#-]?\s*([A-Z]\s*-\s*\d{2,4}[A-Z]?|\d{2,4}[A-Z]?)\b/i;
+  const BARE_ROOM_RE = /^\s*([A-Z]\s*-\s*\d{2,4}[A-Z]?|\d{2,4}[A-Z]?)\s*$/i;
   const ROOM_LABEL_ONLY_RE = /^\s*(?:Classroom|Salle(?:\s+de\s+(?:classe|cours))?|Local|Classe)\s*:?\s*$/i;
 
   // Kept separate from the app shell so the parser library is downloaded only
@@ -70,18 +72,21 @@
     for (let index = 0; index < lines.length; index += 1) {
       const line = String(lines[index] || "").trim();
       const labelled = line.match(ROOM_RE);
-      if (labelled) return { code: labelled[1].toUpperCase(), lineIndex: index };
+      if (labelled) return { code: labelled[1].replace(/\s/g, "").toUpperCase(), lineIndex: index };
+
+      const wrapped = `${line}\n${lines[index + 1] || ""}`.match(ROOM_RE);
+      if (wrapped && wrapped.index < line.length) return { code: wrapped[1].replace(/\s/g, "").toUpperCase(), lineIndex: index + 1 };
 
       if (isRoomLabelOnly(line) && index + 1 < lines.length) {
         const next = String(lines[index + 1] || "").trim().match(BARE_ROOM_RE);
-        if (next) return { code: next[1].toUpperCase(), lineIndex: index + 1 };
+        if (next) return { code: next[1].replace(/\s/g, "").toUpperCase(), lineIndex: index + 1 };
       }
     }
 
     const joined = lines.join("\n");
     const joinedMatch = joined.match(ROOM_RE);
     if (joinedMatch) {
-      const code = joinedMatch[1].toUpperCase();
+      const code = joinedMatch[1].replace(/\s/g, "").toUpperCase();
       const lineIndex = Math.max(0, lines.findIndex(line => String(line).toUpperCase().includes(code)));
       return { code, lineIndex };
     }
@@ -380,18 +385,19 @@
     for (const day of DAYS) {
       const matches = items.filter(item => dayMatchesLabel(day, item.text));
       if (!matches.length) {
+        if (["Saturday", "Sunday"].includes(day)) continue;
         throw new Error("Could not locate all weekday columns. Make sure this is an English or French Marianopolis Omnivox schedule PDF.");
       }
       dayItems[day] = matches.sort((a, b) => a.y0 - b.y0)[0];
     }
 
-    const centers = DAYS.map(day => dayItems[day].cx);
+    const centers = Object.values(dayItems).map(item => item.cx);
     const spacings = centers.slice(1).map((center, index) => center - centers[index]).filter(value => value > 20);
     const defaultWidth = median(spacings);
     if (!Number.isFinite(defaultWidth)) throw new Error("Could not determine the timetable column width.");
 
     const columns = {};
-    for (const day of DAYS) {
+    for (const day of Object.keys(dayItems)) {
       const item = dayItems[day];
       const candidates = rects.filter(rect =>
         rect.x0 <= item.cx && item.cx <= rect.x1 &&
@@ -465,12 +471,14 @@
 
     let instructor = null;
     if (roomInfo.lineIndex >= 0) {
+      const instructorLines = [];
       for (const rawLine of lines.slice(roomInfo.lineIndex + 1)) {
         const line = String(rawLine || "").trim();
-        if (!line || isRoomLabelOnly(line) || BARE_ROOM_RE.test(line) || EXPLICIT_RANGE_RE.test(line)) continue;
-        instructor = line;
-        break;
+        if (isRoomLabelOnly(line) || EXPLICIT_RANGE_RE.test(line)) break;
+        if (!line || BARE_ROOM_RE.test(line)) continue;
+        instructorLines.push(line);
       }
+      instructor = instructorLines.join(" ").replace(/-\s+/g, "-") || null;
     }
 
     const result = {
@@ -708,6 +716,7 @@
 
     for (const day of DAYS) {
       const column = columns[day];
+      if (!column) continue;
       const boundaries = columnBoundaries(model, column, gridTop, gridBottom, rowHeight);
 
       // Anchor parsing on the course-code text itself. This works for both the
@@ -847,7 +856,12 @@
 
   globalThis.WhosFreeParser = {
     parseSchedulePdf,
-    version: "browser-parser-3-bilingual",
+    extractScheduleClasses: extractClasses,
+    extractScheduleName: extractPersonName,
+    parseScheduleClassLines: parseClassLines,
+    groupScheduleLines: groupTextLines,
+    scheduleTimesFromRectangle: timesFromRectangle,
+    version: "browser-parser-4-weekends-wrapped-fields",
     // Exposed for deterministic local tests; the app UI does not use these.
     __test: { parseScheduleModel, parseClassLines, groupTextLines, extractClasses },
   };

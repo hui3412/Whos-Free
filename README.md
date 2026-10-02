@@ -1,19 +1,98 @@
-## My additions
-
-This fork adds:
-
-- On-device recognition of schedule pictures (JPG, PNG and WebP), without uploading them to an OCR server. (on device OCR)
-- An editable weekly grid to correct detected wording, days and times before saving.
-- Manual schedule entry without picture recognition.
-- An Edit button for saved schedules.
-- Break detection based on busy times, without requiring recognized course names or codes.
-- Picture-cropping instructions to keep the grid borders, time labels and day headings visible.
-
-Recognition can make mistakes. Check the detected busy times before saving.
-
-# Who's Free? — Web App v8
+# Who's Free? — Web App v12
 
 A privacy-first static web app for comparing Marianopolis schedules.
+
+## v12: editable weekly grid and manual schedules
+
+- Picture detection fills a seven-day grid. Select a busy block to edit its
+  day, start/end time or wording; the grid and break durations update immediately.
+- **Enter schedule manually** opens the same blank grid without running OCR.
+  Use the **+** beside a day to add occupied times. Labels and course details
+  are optional; only day and valid times affect availability.
+- **Edit** beside a saved person reopens their grid. Save applies corrections;
+  Cancel leaves the existing database unchanged. An empty schedule is allowed.
+- Detection retains occupied cells even when their text has no recognizable
+  course code or room. Unreadable text and merged courses are flagged for review
+  while keeping their occupied span. Course names never determine breaks.
+- Green blocks show gaps between occupied times. Overlapping busy spans are
+  combined when calculating gaps and break notifications, preventing false breaks.
+- Local OCR was rerun on all three supplied pictures: 20, 16 and 15 occupied
+  entries respectively, with all previous day/time/code/section/room results intact.
+  Automated checks cover live grid edits, gaps, overlaps, manual entry without
+  OCR, optional labels, saved-schedule editing, validation and cancellation.
+
+This version has not been deployed or tested on a real iPhone Safari browser.
+
+## Earlier: additional schedule layouts
+
+- Seven-day timetables retain Saturday and Sunday classes, including their
+  day in the editable review and exported database. Weekend classes also
+  affect availability, next-class details and break notifications; the app
+  no longer assumes everyone is free on weekends.
+- Faint JPEG grid borders are detected without treating dense text as a
+  border. The full-page time labels are used first to avoid cropping a final
+  digit from the narrow time column.
+- Athlete and conflict labels are retained as `kind: "busy_block"` entries.
+  They count as occupied time for availability; review or remove them when
+  the label doesn't represent a real commitment. Their hidden course names
+  and details are not inferred.
+- Numeric room `900`, wrapped room `D-120B`, and wrapped instructor names
+  remain complete.
+- A region containing multiple course codes is kept as an uncertain busy
+  span for review and splitting in the editor.
+
+Two additional uploaded schedules were processed locally: the first yielded
+12 classes and 8 labeled busy blocks; the second yielded 16 classes including
+Saturday. All day/start/end times, course codes, sections and rooms matched
+the visible images. Text recognition still misread some accents, roman `I`
+as `|`, and `Conflict 1` as `Conflict 4`; correct these in review. The original
+15-session sample also passed again. Ten automated regression tests pass.
+No real iPhone Safari validation or website deployment has been performed.
+
+## New in v10: local picture import
+
+**Schedules → Add schedule picture** accepts JPEG, PNG and WebP screenshots.
+Tesseract.js reads English/French text on the device, while a timetable parser
+uses visible grid borders and the printed time column to assign each class
+to its weekday and time. There is no OCR server or AI API call.
+
+The recognized schedule opens in a review screen. Enter the person's name if
+the picture has no name header, compare the extracted classes with the
+original picture, correct fields, and add/remove classes before saving.
+Recognition never writes the database until **Save schedule** is selected.
+Replacing an existing person's schedule requires confirmation.
+
+Use a clear, upright screenshot that includes all five weekday headings,
+the left time column and the grid borders. Blurry or tilted camera photos,
+cropped headings and different timetable layouts may fail or need manual
+corrections. OCR can misread names and codes even in a clear screenshot.
+The existing PDF importer still expects a text-based Omnivox PDF; for an
+image-only PDF, use the original picture with the new picture importer.
+
+The OCR code and English/French language files are bundled in `assets/ocr/`.
+The first picture import downloads these static files from this same website;
+no picture bytes are uploaded. On supported browsers, the service worker
+caches the files as they are used so later imports can run offline. Offline
+recognition requires a completed first import and retained browser storage.
+The website's existing analytics and GSAP loading are unchanged; neither
+receives the picture or recognized schedule data from the picture importer.
+
+Deploy all app files, including `schedule-image-parser.js` and `assets/ocr/`,
+to the existing GitHub Pages repository root. No backend, API key or build
+step is needed. The v12 shell cache and asset URLs replace earlier shells.
+The optional `package.json`, lockfile and `tests/` are for development only.
+
+### Validation
+
+Run `npm install` and `npm test` with Node.js 20.19 or newer. Tests cover
+missing time labels, French weekday headings, review/name/time validation,
+correction persistence, cancellation, and lazy offline caching of OCR assets.
+
+The uploaded sample schedule was also processed locally with Tesseract.js
+6.0.1 and core 6.0.0: all 15 sessions and their day/start/end times matched
+the manual transcription. One instructor name was misread, confirming the
+need for review. Real iPhone Safari performance and layout still need device
+testing; the automated review tests use a DOM simulation.
 
 ## What's new in v8
 
@@ -29,7 +108,7 @@ A privacy-first static web app for comparing Marianopolis schedules.
 
 ## Privacy model
 
-Schedule PDFs and `schedules.json` stay on the user's device. The app stores the local schedule database in IndexedDB (with a localStorage fallback).
+Schedule pictures, PDFs and `schedules.json` stay on the user's device. The app stores the local schedule database in IndexedDB (with a localStorage fallback).
 
 The hosted GitHub Pages site does **not** need a `schedules.json` file.
 
@@ -80,6 +159,7 @@ Upload these to the **root** of the GitHub repository:
 index.html
 app.js
 schedule-parser.js
+schedule-image-parser.js
 styles.css
 service-worker.js
 manifest.webmanifest
@@ -97,7 +177,7 @@ Folder: / (root)
 
 ## Updating an existing install
 
-v8 uses versioned files and `whos-free-shell-v8`, so previous installs should update automatically after GitHub Pages redeploys.
+v12 uses versioned files and `whos-free-shell-v12`, so previous installs should update automatically after GitHub Pages redeploys.
 
 If a device still shows an older version, close the page/Home Screen app completely and reopen it.
 
