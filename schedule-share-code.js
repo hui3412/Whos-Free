@@ -177,17 +177,55 @@
     }
     return { schema_version: 1, people };
   }
+  function busyPeriods(person) {
+    const periods = [];
+    for (const day of DAYS) {
+      const items = (person.classes || []).filter(item => item.day === day)
+        .map(item => [time(item.start), time(item.end)]).sort((a, b) => a[0] - b[0]);
+      for (const [start, end] of items) {
+        const last = periods[periods.length - 1];
+        if (last && last.day === day && start <= last.end) last.end = Math.max(last.end, end);
+        else periods.push({ day, start, end });
+      }
+    }
+    return periods;
+  }
+  function scheduleMatch(a, b) {
+    const left = busyPeriods(a), right = busyPeriods(b);
+    const duration = periods => periods.reduce((sum, item) => sum + item.end - item.start, 0);
+    let overlap = 0;
+    for (const x of left) for (const y of right) if (x.day === y.day) overlap += Math.max(0, Math.min(x.end, y.end) - Math.max(x.start, y.start));
+    const union = duration(left) + duration(right) - overlap;
+    return union ? overlap / union : 1;
+  }
+  function numberedName(name, number) {
+    const suffix = ` ${number}`;
+    return `${name.trim().slice(0, 120 - suffix.length).trimEnd()}${suffix}`;
+  }
   function merge(existing, incoming) {
     const people = { ...(existing?.people || {}) };
-    const names = new Set(Object.keys(people).map(normalizedName));
+    const names = new Map(Object.keys(people).map(name => [normalizedName(name), name]));
+    const renamed = [];
     let added = 0, skipped = 0;
     for (const [name, person] of Object.entries(incoming.people)) {
       const normalized = normalizedName(name);
-      if (names.has(normalized)) { skipped++; continue; }
-      Object.defineProperty(people, name, { value: person, enumerable: true, configurable: true, writable: true });
-      names.add(normalized); added++;
+      const candidates = Object.keys(people).filter(key => {
+        if (normalizedName(key) === normalized) return true;
+        const suffix = normalizedName(key).match(/ (\d+)$/);
+        return suffix && Number(suffix[1]) >= 2 && normalizedName(key) === normalizedName(numberedName(name, Number(suffix[1])));
+      });
+      if (candidates.some(key => scheduleMatch(people[key], person) > 0.5)) { skipped++; continue; }
+      let target = name;
+      if (names.has(normalized)) {
+        let number = 2;
+        while (names.has(normalizedName(numberedName(name, number)))) number++;
+        target = numberedName(name, number);
+        renamed.push({ from: name, to: target });
+      }
+      Object.defineProperty(people, target, { value: person, enumerable: true, configurable: true, writable: true });
+      names.set(normalizedName(target), target); added++;
     }
-    return { data: { ...(existing || {}), schema_version: existing?.schema_version || 1, people }, added, skipped };
+    return { data: { ...(existing || {}), schema_version: existing?.schema_version || 1, people }, added, skipped, renamed };
   }
-  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES } };
+  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, scheduleMatch } };
 })();

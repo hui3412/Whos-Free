@@ -139,7 +139,7 @@ test("group dialog validates duplicate names, saves safely and traps keyboard fo
 });
 
 test("main view toggles are compact neighbors and group management is inside Schedules", async () => {
-  const { window, el, manage, finish } = await app();
+  const { window, el, manage, finish, create } = await app();
   try {
     assert.equal(el("showGroupsToggle").parentElement, el("viewToggleButton").parentElement);
     for (const id of ["showGroupsToggle", "viewToggleButton"]) {
@@ -147,11 +147,18 @@ test("main view toggles are compact neighbors and group management is inside Sch
       assert.ok(el(id).getAttribute("aria-label"));
     }
     assert.ok(el("scheduleModal").contains(el("manageGroupsButton")));
-    assert.ok(el("scheduleModal").contains(el("groupVisibility")));
+    assert.ok(el("peopleList").parentElement.contains(el("groupVisibility")));
+    assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle"));
+    assert.equal(el("viewToggleButton").querySelector("[data-mode-label]").textContent, "Free");
+    manage(); create("Lunch", ["Alice", "Bob"]); finish();
+    assert.equal(el("groupVisibility").hidden, false);
+    el("showGroupsToggle").click();
+    assert.equal(el("groupVisibility").hidden, true);
     assert.equal(el("groupWeekModal").querySelector("#editGroupFromWeekButton"), null);
     el("showGroupsToggle").click(); assert.equal(el("showGroupsToggle").title, "Hide groups");
     assert.ok(el("showGroupsToggle").querySelector("svg"), "toggling must keep the icon");
     el("viewToggleButton").click(); assert.equal(el("viewToggleButton").title, "Show everyone");
+    assert.equal(el("viewToggleButton").querySelector("[data-mode-label]").textContent, "All");
     manage(); finish();
   } finally { await window.happyDOM.abort(); }
 });
@@ -175,5 +182,21 @@ test("a merged ten-minute overlap is filled by the five-free neighbor, with exac
     filled.click();
     assert.match(el("groupSlotDetails").textContent, /9:35 AM–9:45 AM · Everyone free/);
     assert.equal(el("groupSlotDetails").querySelectorAll(".group-exact-period").length, 2);
+  } finally { await window.happyDOM.abort(); }
+});
+
+test("renaming a saved person updates every group and keeps the pin", async () => {
+  const { window, el, manage, finish, create, prefs, tick } = await app();
+  try {
+    manage(); create("Lunch", ["Bob", "Alice"]); create("Club", ["Bob", "Cara"]); finish();
+    el("scheduleDataButton").click();
+    window.document.querySelector('[aria-label="Edit Bob"]').click();
+    el("imageReviewName").value = "Robert"; el("saveImageScheduleButton").click(); await tick();
+    const stored = JSON.parse(window.localStorage.getItem("whos-free-local-schedules")).data.people;
+    assert.ok(stored.Robert); assert.equal(stored.Bob, undefined);
+    for (const group of prefs().groups) {
+      assert.ok(group.members.includes("Robert")); assert.ok(!group.members.includes("Bob"));
+    }
+    assert.deepEqual(JSON.parse(window.localStorage.getItem("whos-free-people-preferences-v1")).pinnedPeople, ["Robert"]);
   } finally { await window.happyDOM.abort(); }
 });

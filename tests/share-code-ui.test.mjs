@@ -87,3 +87,33 @@ test("a device with no schedules can import a code", async () => {
     assert.match(receiver.el("importCodeStatus").textContent, /Imported 1 schedule/);
   } finally { await receiver.window.happyDOM.abort(); }
 });
+
+test("a different same-name schedule imports with an editable name and skips on reimport", async () => {
+  const person = day => ({ classes: [{ day, start: "09:00", end: "10:00", course: "Course" }] });
+  const receiver = await app({ people: { David: person("Monday") } });
+  try {
+    const code = await receiver.window.WhosFreeShareCode.encode({ people: { David: person("Tuesday") } });
+    receiver.el("importCodeButton").click(); receiver.el("importCodeInput").value = code;
+    receiver.el("decodeCodeButton").click(); await receiver.wait();
+    assert.match(receiver.el("importCodeStatus").textContent, /Imported different schedules as David 2/);
+    assert.equal(receiver.stored().data.people["David 2"].classes[0].day, "Tuesday");
+    assert.equal(receiver.stored().data.people.David.classes[0].day, "Monday");
+    receiver.el("decodeCodeButton").click(); await receiver.wait();
+    assert.match(receiver.el("importCodeStatus").textContent, /Imported 0 schedules. Skipped 1/);
+    receiver.el("closeImportButton").click();
+    receiver.window.document.querySelector('[aria-label="Edit David 2"]').click();
+    assert.equal(receiver.el("imageReviewName").value, "David 2");
+    receiver.el("imageReviewName").value = "David Chen";
+    receiver.el("saveImageScheduleButton").click(); await receiver.wait();
+    assert.ok(receiver.stored().data.people["David Chen"]);
+    assert.equal(receiver.stored().data.people["David 2"], undefined);
+  } finally { await receiver.window.happyDOM.abort(); }
+});
+
+test("PDF and JSON sections follow the people list without moving the earlier sections", async () => {
+  const receiver = await app(null);
+  try {
+    const titles = [...receiver.el("scheduleModal").querySelectorAll(':scope > section > .schedule-action-section')].map(e => e.getAttribute("aria-labelledby"));
+    assert.deepEqual(titles, ["scheduleGroupsTitle", "addPictureTitle", "imageReviewTitle", "shareCodeTitle", "peopleManagerTitle", "addScheduleTitle", "databaseTitle"]);
+  } finally { await receiver.window.happyDOM.abort(); }
+});

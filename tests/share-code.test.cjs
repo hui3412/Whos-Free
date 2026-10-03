@@ -66,6 +66,46 @@ test("prototype-like names remain ordinary schedule entries", async () => {
   assert.equal({}.classes, undefined);
 });
 
+test("same names use busy-time overlap, with strictly more than fifty percent required", () => {
+  const person = (start, end, day = "Monday") => ({ classes: [{ day, start, end }] });
+  const existing = { people: { David: person("08:00", "09:00") } };
+  assert.equal(api.merge(existing, { people: { David: person("08:00", "09:59") } }).skipped, 1);
+  const half = api.merge(existing, { people: { David: person("08:00", "10:00") } });
+  assert.equal(half.added, 1); assert.equal(half.skipped, 0);
+  assert.deepEqual(plain(half.renamed), [{ from: "David", to: "David 2" }]);
+  assert.equal(api.merge(existing, { people: { David: person("08:00", "09:00", "Tuesday") } }).added, 1);
+  assert.equal(api.__test.scheduleMatch({ classes: [] }, { classes: [] }), 1);
+  assert.equal(api.__test.scheduleMatch({ classes: [] }, existing.people.David), 0);
+});
+
+test("numbered imports survive reimport and never overwrite an occupied name", async () => {
+  const person = day => ({ classes: [{ day, start: "09:00", end: "10:00" }] });
+  const existing = { people: { David: person("Monday"), "DAVID 2": person("Tuesday"), Unrelated: person("Thursday") } };
+  const incoming = await api.decode(await api.encode({ people: { david: person("Wednesday") } }));
+  const result = api.merge(existing, incoming);
+  assert.equal(result.added, 1); assert.ok(result.data.people["david 3"]);
+  assert.equal(result.data.people.David, existing.people.David);
+  assert.equal(result.data.people["DAVID 2"], existing.people["DAVID 2"]);
+  const repeated = api.merge(result.data, incoming);
+  assert.equal(repeated.added, 0); assert.equal(repeated.skipped, 1);
+  const numberedCode = await api.decode(await api.encode({ people: { "david 3": result.data.people["david 3"] } }));
+  assert.equal(api.merge(result.data, numberedCode).skipped, 1);
+  assert.equal(Object.keys(existing.people).length, 3);
+  const longName = "D".repeat(120);
+  const longResult = api.merge({ people: { [longName]: person("Monday") } }, { people: { [longName]: person("Friday") } });
+  assert.equal(Object.keys(longResult.data.people)[1].length, 120);
+  assert.equal(api.merge(longResult.data, { people: { [longName]: person("Friday") } }).skipped, 1);
+});
+
+test("schedule checks ignore wording, ordering and duplicated or split busy blocks", () => {
+  const item = (start, end) => ({ day: "Friday", start, end });
+  const original = { classes: [{ ...item("09:00", "11:00"), course: "Old course" }] };
+  const equivalent = { classes: [item("10:00", "11:00"), item("09:00", "10:00"), item("09:30", "10:30")] };
+  assert.equal(api.__test.scheduleMatch(original, equivalent), 1);
+  const result = api.merge({ people: { David: original } }, { people: { " DAVID ": equivalent } });
+  assert.equal(result.skipped, 1); assert.equal(result.data.people.David, original);
+});
+
 test("damaged, unsupported and malformed codes fail without yielding schedules", async () => {
   const code = await api.encode(data);
   await assert.rejects(api.decode(""), /not a valid/);

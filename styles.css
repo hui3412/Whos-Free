@@ -2460,7 +2460,8 @@ input[type="time"],
 .view-icon-button, .people-group-actions .group-hide { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-width: 36px; min-height: 36px; padding: 0; flex-shrink: 0; }
 .view-icon-button svg, .group-hide svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .view-icon-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--card-selected); }
-.group-visibility { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin-top: 12px; }
+.view-mode-button { width: auto; gap: 5px; padding: 0 9px; font-size: 0.8rem; }
+.group-visibility { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 18px; }
 .group-visibility[hidden] { display: none; }
 .group-visibility-choice { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; background: var(--input); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; overflow-wrap: anywhere; cursor: pointer; }
 .group-visibility-choice input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--accent); }
@@ -2502,6 +2503,7 @@ input[type="time"],
 .group-exact-period + .group-exact-period { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
 @media (max-width: 560px) {
   .people-heading-row { gap: 8px; }
+  .group-visibility { padding-left: 12px; padding-right: 12px; }
   .people-actions .count-badge { font-size: 0.72rem; padding: 0 7px; }
   .group-manager-row { align-items: flex-start; flex-direction: column; }
   .people-group { padding: 8px; }

@@ -21,8 +21,8 @@ test("OCR assets are cached locally and missing assets never receive HTML", asyn
   let installation;
   listeners.install({ waitUntil: promise => { installation = promise; } });
   await installation;
-  assert.ok(shell.includes("./schedule-share-code.js?v=17"), "share-code support must be cached for offline use");
-  assert.ok(shell.includes("./schedule-groups.js?v=17"), "group availability must work offline");
+  assert.ok(shell.includes("./schedule-share-code.js?v=18"), "share-code support must be cached for offline use");
+  assert.ok(shell.includes("./schedule-groups.js?v=18"), "group availability must work offline");
   function request(url, mode = "cors") {
     let result;
     listeners.fetch({ request: { url, mode, method: "GET" }, respondWith: promise => { result = promise; } });

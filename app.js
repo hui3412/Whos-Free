@@ -855,7 +855,7 @@
     const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
     els.manageGroupsButton.disabled = !state.hasData || busy;
     setViewToggle(els.showGroupsToggle, state.showGroups ? "Hide groups" : "Show groups", state.showGroups);
-    els.groupVisibility.hidden = !state.hasData || !state.groups.length;
+    els.groupVisibility.hidden = !state.showGroups || !state.hasData || !state.groups.length;
     els.groupVisibility.replaceChildren();
     if (els.groupVisibility.hidden) return;
     const checkbox = (label, checked, onChange) => {
@@ -1430,7 +1430,7 @@
 
   function openManualSchedule(name = "", person = { source_file: "manual", classes: [] }) {
     if (state.isParsing || state.pendingImage) return;
-    state.pendingImage = { name, person };
+    state.pendingImage = { name, person, editingName: name || null };
     els.imageReviewName.value = name;
     els.imageReviewClasses.replaceChildren();
     els.imageReviewPreview.closest("details").hidden = true;
@@ -1496,16 +1496,28 @@
     ), kind: card.dataset.kind || "class" }));
     // An empty manual schedule represents someone with no busy times.
     const workingData = state.hasData ? JSON.parse(JSON.stringify(state.data)) : { schema_version: 1, people: {} };
+    const editingName = state.pendingImage.editingName;
+    const renamed = editingName && editingName !== name;
     const replacement = Object.prototype.hasOwnProperty.call(workingData.people, name);
     // Define an own property safely even if a person's name is __proto__.
     Object.defineProperty(workingData.people, name, { value: { source_file: state.pendingImage.person.source_file, classes }, writable: true, enumerable: true, configurable: true });
     try { validateData(workingData); }
     catch (error) { els.imageReviewError.textContent = error.message; return; }
     if (replacement && !window.confirm(`Replace the existing schedule for ${name} with these reviewed classes?`)) return;
+    if (renamed) delete workingData.people[editingName];
     state.isParsing = true;
     updateScheduleModal();
     try {
       state.data = workingData;
+      if (renamed) {
+        if (state.pinnedPeople.delete(editingName)) state.pinnedPeople.add(name);
+        if (Object.prototype.hasOwnProperty.call(state.nicknames, editingName)) {
+          Object.defineProperty(state.nicknames, name, { value: state.nicknames[editingName], enumerable: true, writable: true, configurable: true });
+          delete state.nicknames[editingName];
+        }
+        for (const group of state.groups) group.members = [...new Set(group.members.map(member => member === editingName ? name : member))];
+        savePeoplePreferences(); saveGroupPreferences();
+      }
       state.selectedPerson = name;
       const warning = await persistCurrentDatabase("Local schedule collection");
       clearImageReview();
@@ -1947,7 +1959,8 @@
         state.data = result.data;
         warning = await persistCurrentDatabase("Local schedule collection");
       }
-      codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} already stored.`, warning ? "error" : "success");
+      const renameNote = result.renamed.length ? ` Imported different schedules as ${result.renamed.map(item => item.to).join(", ")}. You can edit their names in the people list.` : "";
+      codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} matching schedules.${renameNote}`, warning ? "error" : "success");
     } catch (error) {
       codeStatus(els.importCodeStatus, error.message || "The code could not be imported.", "error");
     } finally { state.isParsing = false; updateScheduleModal(); }
@@ -2525,6 +2538,7 @@
 
     els.peopleHeading.textContent = state.showGroups ? "Groups" : state.showEveryone ? "Everyone" : state.useLiveTime ? "Free now" : "Free";
     setViewToggle(els.viewToggleButton, state.showEveryone ? "Show only free" : "Show everyone", state.showEveryone);
+    els.viewToggleButton.querySelector("[data-mode-label]").textContent = state.showEveryone ? "Free" : "All";
     const nextFreeCountText = `${free.length} of ${peopleCount} free`;
     els.freeCount.textContent = nextFreeCountText;
     animateCountIfChanged(nextFreeCountText);
@@ -2695,7 +2709,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=17", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=18", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

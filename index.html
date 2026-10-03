@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
   <div class="app-shell">
@@ -76,12 +76,13 @@
         <div class="people-heading-row">
           <h2 id="peopleHeading">Free now</h2>
           <div class="people-actions">
+            <button id="viewToggleButton" class="secondary-button view-icon-button view-mode-button" type="button" aria-label="Show everyone" title="Show everyone" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v3"/></svg><span data-mode-label aria-hidden="true">All</span><span class="visually-hidden" data-toggle-label>Show everyone</span></button>
             <button id="showGroupsToggle" class="secondary-button view-icon-button" type="button" aria-label="Show groups" title="Show groups" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="visually-hidden" data-toggle-label>Show groups</span></button>
-            <button id="viewToggleButton" class="secondary-button view-icon-button" type="button" aria-label="Show everyone" title="Show everyone" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v3"/></svg><span class="visually-hidden" data-toggle-label>Show everyone</span></button>
             <span id="freeCount" class="count-badge">0 of 0 free</span>
           </div>
         </div>
 
+        <div id="groupVisibility" class="group-visibility" role="group" aria-label="Visible groups" hidden></div>
         <p id="statusLine" class="status-line" aria-live="polite">Checking this device for schedule data…</p>
 
         <div id="peopleList" class="people-list" role="list" aria-label="People"></div>
@@ -121,9 +122,8 @@
       <section class="schedule-action-section" aria-labelledby="scheduleGroupsTitle">
         <div class="section-kicker">Groups</div>
         <h3 id="scheduleGroupsTitle">Organize your people</h3>
-        <p>Create or edit groups here. Choose which groups appear when the group view is on.</p>
+        <p>Create or edit groups here. Show groups on the main page to choose which groups appear.</p>
         <button id="manageGroupsButton" class="secondary-button" type="button">Manage groups</button>
-        <div id="groupVisibility" class="group-visibility" role="group" aria-label="Visible groups" hidden></div>
       </section>
 
       <section class="schedule-action-section" aria-labelledby="addPictureTitle">
@@ -151,14 +151,6 @@
         </div>
       </section>
 
-      <section class="schedule-action-section" aria-labelledby="addScheduleTitle">
-        <div class="section-kicker">Add people</div>
-        <h3 id="addScheduleTitle">Import a Marianopolis schedule PDF</h3>
-        <p>Select one or more Omnivox schedule PDFs. The person's name and classes are read on this device and added automatically.</p>
-        <button id="addSchedulePdfButton" class="primary-button wide-action" type="button">Add schedule PDF</button>
-        <div id="parserStatus" class="parser-status" aria-live="polite"></div>
-      </section>
-
       <section class="schedule-action-section" aria-labelledby="shareCodeTitle">
         <div class="section-kicker">Send schedules</div>
         <h3 id="shareCodeTitle">Share with a code</h3>
@@ -182,23 +174,13 @@
         </div>
         <div id="codeImportPanel" class="share-code-panel" hidden>
           <h4>Import a friend’s schedules</h4>
-          <p>Paste the full code, including its special characters. Older codes need a fresh export. People already stored under the same name are skipped; your existing schedules stay as they are.</p>
+          <p>Paste the full code, including its special characters. Older codes need a fresh export. Matching names are skipped only when more than 50% of their combined weekly class time overlaps. Different schedules import as Name 2, Name 3, and so on. You can edit names below; existing schedules stay as they are.</p>
           <label class="field-group share-code-field"><span>Code from your friend</span><textarea id="importCodeInput" rows="5" maxlength="1800000" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></label>
           <div id="importCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
           <div class="modal-actions">
             <button id="decodeCodeButton" class="primary-button" type="button">Import schedules</button>
             <button id="closeImportButton" class="secondary-button" type="button">Done</button>
           </div>
-        </div>
-      </section>
-
-      <section class="schedule-action-section" aria-labelledby="databaseTitle">
-        <div class="section-kicker">Database</div>
-        <h3 id="databaseTitle">Import or share schedules.json</h3>
-        <p>Import a friend's database, or share your complete local database through the system share sheet.</p>
-        <div class="modal-actions database-actions">
-          <button id="importSchedulesButton" class="secondary-button" type="button">Import schedules.json</button>
-          <button id="shareSchedulesButton" class="secondary-button" type="button">Share schedules.json</button>
         </div>
       </section>
 
@@ -209,6 +191,24 @@
           <span id="peopleManagerCount" class="count-badge">0</span>
         </div>
         <div id="peopleManagerList" class="people-manager-list"></div>
+      </section>
+
+      <section class="schedule-action-section" aria-labelledby="addScheduleTitle">
+        <div class="section-kicker">Add people</div>
+        <h3 id="addScheduleTitle">Import a Marianopolis schedule PDF</h3>
+        <p>Select one or more Omnivox schedule PDFs. The person's name and classes are read on this device and added automatically.</p>
+        <button id="addSchedulePdfButton" class="primary-button wide-action" type="button">Add schedule PDF</button>
+        <div id="parserStatus" class="parser-status" aria-live="polite"></div>
+      </section>
+
+      <section class="schedule-action-section" aria-labelledby="databaseTitle">
+        <div class="section-kicker">Database</div>
+        <h3 id="databaseTitle">Import or share schedules.json</h3>
+        <p>Import a friend's database, or share your complete local database through the system share sheet.</p>
+        <div class="modal-actions database-actions">
+          <button id="importSchedulesButton" class="secondary-button" type="button">Import schedules.json</button>
+          <button id="shareSchedulesButton" class="secondary-button" type="button">Share schedules.json</button>
+        </div>
       </section>
 
       <button id="removeSchedulesButton" class="danger-button remove-all-button" type="button">Remove all local schedules</button>
@@ -347,11 +347,11 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=17" defer></script>
-  <script src="schedule-image-parser.js?v=17" defer></script>
-  <script src="schedule-availability.js?v=17" defer></script>
-  <script src="schedule-share-code.js?v=17" defer></script>
-  <script src="schedule-groups.js?v=17" defer></script>
-  <script src="app.js?v=17" defer></script>
+  <script src="schedule-parser.js?v=18" defer></script>
+  <script src="schedule-image-parser.js?v=18" defer></script>
+  <script src="schedule-availability.js?v=18" defer></script>
+  <script src="schedule-share-code.js?v=18" defer></script>
+  <script src="schedule-groups.js?v=18" defer></script>
+  <script src="app.js?v=18" defer></script>
 </body>
 </html>
