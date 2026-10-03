@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
   <div class="app-shell">
@@ -81,6 +81,11 @@
           </div>
         </div>
 
+        <div class="group-toolbar">
+          <button id="showGroupsToggle" class="secondary-button compact" type="button" aria-pressed="false">Show groups</button>
+          <button id="manageGroupsButton" class="secondary-button compact" type="button">Manage groups</button>
+        </div>
+        <div id="groupVisibility" class="group-visibility" role="group" aria-label="Visible groups" hidden></div>
         <p id="statusLine" class="status-line" aria-live="polite">Checking this device for schedule data…</p>
 
         <div id="peopleList" class="people-list" role="list" aria-label="People"></div>
@@ -286,6 +291,42 @@
     </section>
   </div>
 
+  <div id="groupsModal" class="modal-backdrop" hidden>
+    <section class="schedule-modal groups-modal panel" role="dialog" aria-modal="true" aria-labelledby="groupsModalTitle">
+      <div class="modal-header">
+        <div><h2 id="groupsModalTitle">Manage groups</h2><p>A person can belong to several groups. Groups and visibility stay on this device. Switch off Show groups to return to the usual list.</p></div>
+        <button id="closeGroupsModal" class="modal-close" type="button" aria-label="Close groups">×</button>
+      </div>
+      <button id="newGroupButton" class="primary-button" type="button">New group</button>
+      <div id="groupsManagerList" class="groups-manager-list"></div>
+      <form id="groupForm" class="group-form" hidden>
+        <h3 id="groupFormTitle">New group</h3>
+        <label class="group-name-field"><span>Group name</span><input id="groupNameInput" type="text" maxlength="60" autocomplete="off" required></label>
+        <p>Select people. Selecting someone here doesn’t remove them from another group.</p>
+        <div id="groupMembersList" class="group-members-list"></div>
+        <p id="groupFormError" class="parser-status" data-tone="error" role="alert"></p>
+        <div class="modal-actions">
+          <button class="primary-button" type="submit">Save group</button>
+          <button id="cancelGroupButton" class="secondary-button" type="button">Cancel</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="groupWeekModal" class="modal-backdrop" hidden>
+    <section class="schedule-modal group-week-modal panel" role="dialog" aria-modal="true" aria-labelledby="groupWeekTitle">
+      <div class="modal-header">
+        <div><div class="section-kicker">Group availability</div><h2 id="groupWeekTitle">Weekly availability</h2><p id="groupWeekSummary"></p></div>
+        <button id="closeGroupWeekModal" class="modal-close" type="button" aria-label="Close group availability">×</button>
+      </div>
+      <p class="group-week-note">Darker blocks mean more people are free. Ten-minute passing gaps count as busy. Select a block to see who is free or busy.</p>
+      <div id="groupWeekLegend" class="group-week-legend" aria-label="Availability color key"></div>
+      <div class="review-grid-scroll" tabindex="0" aria-label="Group weekly availability. Scroll horizontally for more days."><div id="groupWeekGrid" class="review-grid group-week-grid"></div></div>
+      <section id="groupSlotDetails" class="group-slot-details" aria-live="polite"><p>Select a time block to see the people available.</p></section>
+      <button id="editGroupFromWeekButton" class="secondary-button" type="button">Edit group</button>
+    </section>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <template id="dataSetupTemplate">
@@ -303,10 +344,11 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=15" defer></script>
-  <script src="schedule-image-parser.js?v=15" defer></script>
-  <script src="schedule-availability.js?v=15" defer></script>
-  <script src="schedule-share-code.js?v=15" defer></script>
-  <script src="app.js?v=15" defer></script>
+  <script src="schedule-parser.js?v=16" defer></script>
+  <script src="schedule-image-parser.js?v=16" defer></script>
+  <script src="schedule-availability.js?v=16" defer></script>
+  <script src="schedule-share-code.js?v=16" defer></script>
+  <script src="schedule-groups.js?v=16" defer></script>
+  <script src="app.js?v=16" defer></script>
 </body>
 </html>

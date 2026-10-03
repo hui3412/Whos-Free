@@ -24,6 +24,12 @@
     mutedPeople: new Set(),
     nicknames: {},
     pinnedPeople: new Set(),
+    groups: [],
+    showGroups: false,
+    hideUngrouped: false,
+    editingGroupId: null,
+    weekGroupId: null,
+    groupReturnFocus: null,
     accentTheme: "blue",
     lastPeopleSignature: "",
     lastDetailPerson: null,
@@ -38,6 +44,7 @@
   const NOTIFICATION_SETTINGS_KEY = "whos-free-notification-settings-v1";
   const NOTIFICATION_HISTORY_KEY = "whos-free-notification-history-v1";
   const PEOPLE_PREFERENCES_KEY = "whos-free-people-preferences-v1";
+  const GROUP_PREFERENCES_KEY = "whos-free-groups-v1";
   const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
   const ACCENT_THEMES = new Set(["blue", "violet", "rose", "mint", "orange"]);
   const BREAK_THRESHOLD_MINUTES = window.WhosFreeAvailability.PASSING_MINUTES;
@@ -108,6 +115,27 @@
     freeCount: document.getElementById("freeCount"),
     statusLine: document.getElementById("statusLine"),
     peopleList: document.getElementById("peopleList"),
+    showGroupsToggle: document.getElementById("showGroupsToggle"),
+    manageGroupsButton: document.getElementById("manageGroupsButton"),
+    groupVisibility: document.getElementById("groupVisibility"),
+    groupsModal: document.getElementById("groupsModal"),
+    closeGroupsModal: document.getElementById("closeGroupsModal"),
+    newGroupButton: document.getElementById("newGroupButton"),
+    groupsManagerList: document.getElementById("groupsManagerList"),
+    groupForm: document.getElementById("groupForm"),
+    groupFormTitle: document.getElementById("groupFormTitle"),
+    groupNameInput: document.getElementById("groupNameInput"),
+    groupMembersList: document.getElementById("groupMembersList"),
+    groupFormError: document.getElementById("groupFormError"),
+    cancelGroupButton: document.getElementById("cancelGroupButton"),
+    groupWeekModal: document.getElementById("groupWeekModal"),
+    groupWeekTitle: document.getElementById("groupWeekTitle"),
+    groupWeekSummary: document.getElementById("groupWeekSummary"),
+    groupWeekLegend: document.getElementById("groupWeekLegend"),
+    groupWeekGrid: document.getElementById("groupWeekGrid"),
+    groupSlotDetails: document.getElementById("groupSlotDetails"),
+    closeGroupWeekModal: document.getElementById("closeGroupWeekModal"),
+    editGroupFromWeekButton: document.getElementById("editGroupFromWeekButton"),
     detailPanel: document.getElementById("detailPanel"),
     toast: document.getElementById("toast"),
     dataSetupTemplate: document.getElementById("dataSetupTemplate"),
@@ -783,6 +811,299 @@
     }
   }
 
+  function loadGroupPreferences() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(GROUP_PREFERENCES_KEY) || "null");
+      const ids = new Set();
+      const groups = (Array.isArray(saved?.groups) ? saved.groups : []).slice(0, 100).filter(group => {
+        if (!group || typeof group.id !== "string" || !group.id || ids.has(group.id) || typeof group.name !== "string" || !group.name.trim() || !Array.isArray(group.members)) return false;
+        ids.add(group.id); return true;
+      }).map(group => ({ id: group.id, name: group.name.trim().slice(0, 60), members: [...new Set(group.members.filter(name => typeof name === "string"))], hidden: group.hidden === true }));
+      return { groups, showGroups: saved?.showGroups === true, hideUngrouped: saved?.hideUngrouped === true };
+    } catch { return { groups: [], showGroups: false, hideUngrouped: false }; }
+  }
+
+  function saveGroupPreferences() {
+    try {
+      localStorage.setItem(GROUP_PREFERENCES_KEY, JSON.stringify({ groups: state.groups, showGroups: state.showGroups, hideUngrouped: state.hideUngrouped }));
+    } catch { showToast("Groups work for this session, but this browser couldn't save them."); }
+  }
+
+  function groupMembers(group) {
+    return window.WhosFreeGroups.membersOf(group, peopleMap());
+  }
+
+  function cleanGroupPreferences() {
+    let changed = false;
+    for (const group of state.groups) {
+      const members = groupMembers(group);
+      if (members.length !== group.members.length) { group.members = members; changed = true; }
+    }
+    if (changed) saveGroupPreferences();
+  }
+
+  function setGroupHidden(group, hidden) {
+    group.hidden = hidden;
+    saveGroupPreferences();
+    refresh({ preserveScroll: true });
+    if (!els.groupsModal.hidden) renderGroupsManager();
+  }
+
+  function updateGroupToolbar() {
+    const focusLabel = els.groupVisibility.contains(document.activeElement) ? document.activeElement.getAttribute("aria-label") : null;
+    els.showGroupsToggle.disabled = !state.hasData;
+    els.manageGroupsButton.disabled = !state.hasData;
+    els.showGroupsToggle.textContent = state.showGroups ? "Hide groups" : "Show groups";
+    els.showGroupsToggle.setAttribute("aria-pressed", String(state.showGroups));
+    els.groupVisibility.hidden = !state.showGroups || !state.hasData;
+    els.groupVisibility.replaceChildren();
+    if (els.groupVisibility.hidden) return;
+    const checkbox = (label, checked, onChange) => {
+      const wrapper = document.createElement("label");
+      wrapper.className = "group-visibility-choice";
+      const input = document.createElement("input");
+      input.type = "checkbox"; input.checked = checked;
+      input.setAttribute("aria-label", `Show ${label}`);
+      input.addEventListener("change", () => onChange(input.checked));
+      wrapper.append(input, document.createTextNode(label));
+      els.groupVisibility.append(wrapper);
+    };
+    state.groups.forEach(group => checkbox(group.name, !group.hidden, checked => setGroupHidden(group, !checked)));
+    checkbox("Ungrouped people", !state.hideUngrouped, checked => {
+      state.hideUngrouped = !checked; saveGroupPreferences(); refresh({ preserveScroll: true });
+    });
+    if (focusLabel) [...els.groupVisibility.querySelectorAll("input")].find(input => input.getAttribute("aria-label") === focusLabel)?.focus();
+  }
+
+  function renderGroupsManager() {
+    els.groupsManagerList.replaceChildren();
+    if (!state.groups.length) {
+      const text = document.createElement("p");
+      text.textContent = "Create a group to find a time everyone can meet.";
+      els.groupsManagerList.append(text);
+    }
+    for (const group of state.groups) {
+      const row = document.createElement("div"); row.className = "group-manager-row";
+      const copy = document.createElement("div");
+      const title = document.createElement("strong"); title.textContent = group.name;
+      const members = document.createElement("small");
+      members.textContent = `${groupMembers(group).length} people${group.hidden ? " · Hidden" : ""}`;
+      copy.append(title, members);
+      const actions = document.createElement("div"); actions.className = "group-manager-actions";
+      for (const [text, action] of [
+        ["Edit", () => editGroup(group.id)],
+        [group.hidden ? "Show" : "Hide", () => setGroupHidden(group, !group.hidden)],
+        ["Delete", () => {
+          if (!window.confirm(`Delete the group “${group.name}”? Its people's schedules will stay on this device.`)) return;
+          state.groups = state.groups.filter(item => item.id !== group.id);
+          if (state.editingGroupId === group.id) cancelGroupEdit();
+          saveGroupPreferences(); renderGroupsManager(); refresh({ preserveScroll: true });
+        }],
+      ]) {
+        const button = document.createElement("button"); button.type = "button";
+        button.className = text === "Delete" ? "mini-danger-button" : "secondary-button compact";
+        button.textContent = text; button.setAttribute("aria-label", `${text} group ${group.name}`);
+        button.addEventListener("click", action); actions.append(button);
+      }
+      row.append(copy, actions); els.groupsManagerList.append(row);
+    }
+  }
+
+  function editGroup(id = null) {
+    const group = state.groups.find(item => item.id === id);
+    state.editingGroupId = group?.id || null;
+    els.groupForm.hidden = false;
+    els.groupFormTitle.textContent = group ? "Edit group" : "New group";
+    els.groupNameInput.value = group?.name || "";
+    els.groupFormError.textContent = "";
+    els.groupMembersList.replaceChildren();
+    const selected = new Set(group?.members || []);
+    for (const name of Object.keys(peopleMap()).sort(comparePeopleNames)) {
+      const label = document.createElement("label"); label.className = "share-selection";
+      const input = document.createElement("input"); input.type = "checkbox";
+      input.dataset.person = name; input.checked = selected.has(name);
+      label.append(input, document.createTextNode(displayName(name)));
+      els.groupMembersList.append(label);
+    }
+    els.groupNameInput.focus();
+  }
+
+  function cancelGroupEdit() {
+    els.groupForm.hidden = true; state.editingGroupId = null;
+    els.newGroupButton.focus();
+  }
+
+  function saveGroup(event) {
+    event.preventDefault();
+    const name = els.groupNameInput.value.trim().slice(0, 60);
+    if (!name) { els.groupFormError.textContent = "Enter a group name."; els.groupNameInput.focus(); return; }
+    if (state.groups.some(group => group.id !== state.editingGroupId && group.name.normalize("NFC").toLowerCase() === name.normalize("NFC").toLowerCase())) {
+      els.groupFormError.textContent = "A group already uses this name. Choose another name."; return;
+    }
+    const members = [...els.groupMembersList.querySelectorAll("input:checked")].map(input => input.dataset.person);
+    const existing = state.groups.find(group => group.id === state.editingGroupId);
+    if (existing) { existing.name = name; existing.members = members; }
+    else {
+      if (state.groups.length >= 100) { els.groupFormError.textContent = "You can save up to 100 groups."; return; }
+      if (!state.groups.length) state.showGroups = true;
+      const id = window.crypto?.randomUUID?.() || `group-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      state.groups.push({ id, name, members, hidden: false });
+    }
+    saveGroupPreferences(); cancelGroupEdit(); renderGroupsManager(); refresh({ preserveScroll: true });
+    showToast(`Group saved: ${name}`);
+  }
+
+  function openGroupsModal(id = null) {
+    state.groupReturnFocus = document.activeElement;
+    els.groupsModal.hidden = false; document.body.style.overflow = "hidden";
+    renderGroupsManager();
+    if (id || !state.groups.length) editGroup(id);
+    else { els.groupForm.hidden = true; els.closeGroupsModal.focus(); }
+    animateModalOpen(els.groupsModal, els.groupsModal.querySelector(".groups-modal"));
+  }
+
+  function closeGroupsModal() {
+    els.groupsModal.hidden = true;
+    if (els.scheduleModal.hidden && els.settingsModal.hidden && els.groupWeekModal.hidden) document.body.style.overflow = "";
+    state.groupReturnFocus?.focus?.();
+  }
+
+  function sharedTimeText(weekly, day, minute) {
+    if (!weekly.members.length) return "Add people to find a shared break.";
+    const next = window.WhosFreeGroups.nextShared(weekly, day, minute);
+    if (!next) return "No shared break longer than 10 minutes this school week.";
+    const end = formatTime(minuteTime(next.end));
+    if (next.now) return `Everyone free now until ${end}`;
+    const when = next.daysAhead === 0 ? "" : `${next.daysAhead === 7 ? "Next " : ""}${next.day} · `;
+    return `Next everyone free: ${when}${formatTime(minuteTime(next.start))}–${end}`;
+  }
+
+  function groupSection(title, members, visible, day, minute, group = null) {
+    const section = document.createElement("section"); section.className = "people-group"; section.setAttribute("role", "listitem");
+    if (group) section.dataset.groupId = group.id;
+    const header = document.createElement("div"); header.className = "people-group-header";
+    const copy = document.createElement("div");
+    const heading = document.createElement("h3"); heading.textContent = title;
+    const detail = document.createElement("p");
+    if (group) {
+      const weekly = window.WhosFreeGroups.week(group, peopleMap());
+      detail.textContent = sharedTimeText(weekly, day, minute);
+      const count = document.createElement("small");
+      count.textContent = `${members.filter(name => isFree(name, day, minute)).length} of ${members.length} free`;
+      copy.append(heading, count, detail);
+      const actions = document.createElement("div"); actions.className = "people-group-actions";
+      const hide = document.createElement("button"); hide.type = "button";
+      hide.className = "secondary-button compact"; hide.textContent = "Hide";
+      hide.setAttribute("aria-label", `Hide group ${group.name}`);
+      hide.addEventListener("click", () => setGroupHidden(group, true));
+      const more = document.createElement("button"); more.type = "button";
+      more.className = "secondary-button group-more"; more.textContent = "…";
+      more.title = "Weekly availability"; more.setAttribute("aria-label", `View weekly availability for ${group.name}`);
+      more.addEventListener("click", () => openGroupWeek(group.id, more));
+      actions.append(hide, more); header.append(copy, actions);
+    } else { copy.append(heading); header.append(copy); }
+    section.append(header);
+    const list = document.createElement("div"); list.setAttribute("role", "list"); list.setAttribute("aria-label", `${title} people`);
+    const filtered = visible.filter(name => members.includes(name));
+    filtered.forEach(name => list.append(renderPersonCard(name, day, minute)));
+    if (!filtered.length) {
+      const message = document.createElement("p"); message.className = "group-empty";
+      message.textContent = members.length ? "Nobody in this group is free at this time. Choose Show everyone to see them." : "No people in this group. Edit it to add members.";
+      list.append(message);
+    }
+    section.append(list);
+    return section;
+  }
+
+  function renderGroupedPeople(visible, day, minute) {
+    const assigned = new Set(state.groups.flatMap(group => groupMembers(group)));
+    const shown = new Set();
+    for (const group of state.groups.filter(item => !item.hidden)) {
+      const members = groupMembers(group);
+      members.forEach(name => shown.add(name));
+      els.peopleList.append(groupSection(group.name, members, visible, day, minute, group));
+    }
+    const ungrouped = Object.keys(peopleMap()).filter(name => !assigned.has(name));
+    if (!state.hideUngrouped && ungrouped.length) {
+      ungrouped.forEach(name => shown.add(name));
+      els.peopleList.append(groupSection("Ungrouped people", ungrouped, visible, day, minute));
+    }
+    if (!els.peopleList.children.length) els.peopleList.append(createEmptyList("No groups shown", "Select a group above, or choose Hide groups to see the usual list."));
+    return { visible: visible.filter(name => shown.has(name)), shown };
+  }
+
+  function groupBlockLabel(segment, total) {
+    const count = segment.available.length;
+    return count === total ? "Everyone free" : count === 0 ? "Nobody free" : count === total - 1 ? "All except 1" : `${count} of ${total} free`;
+  }
+
+  function showGroupSlot(day, segment, total, button) {
+    els.groupWeekGrid.querySelectorAll(".group-time-block").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+    const title = document.createElement("h3");
+    title.textContent = `${day} · ${formatTime(minuteTime(segment.start))}–${formatTime(minuteTime(segment.end))}`;
+    const summary = document.createElement("p"); summary.textContent = `${groupBlockLabel(segment, total)} · ${segment.end - segment.start} minutes`;
+    const free = document.createElement("p"); free.textContent = `Free: ${segment.available.map(displayName).join(", ") || "Nobody"}`;
+    const busy = document.createElement("p"); busy.textContent = `Busy: ${segment.unavailable.map(displayName).join(", ") || "Nobody"}`;
+    els.groupSlotDetails.replaceChildren(title, summary, free, busy);
+    els.groupSlotDetails.scrollIntoView?.({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }
+
+  function openGroupWeek(id, trigger = document.activeElement) {
+    const group = state.groups.find(item => item.id === id);
+    if (!group) return;
+    state.weekGroupId = id; state.groupReturnFocus = trigger;
+    const weekly = window.WhosFreeGroups.week(group, peopleMap()), total = weekly.members.length;
+    els.groupWeekTitle.textContent = `${group.name} · Weekly availability`;
+    els.groupWeekSummary.textContent = `${total} ${total === 1 ? "person" : "people"} · ${formatTime(minuteTime(weekly.start))}–${formatTime(minuteTime(weekly.end))} school hours. Shared break suggestions need more than 10 minutes.`;
+    els.groupWeekLegend.replaceChildren();
+    for (const fraction of [0, 0.25, 0.5, 0.75, 1]) {
+      const label = document.createElement("span"), swatch = document.createElement("i");
+      swatch.style.backgroundColor = window.WhosFreeGroups.shade(fraction, 1).background;
+      label.append(swatch, document.createTextNode(fraction === 1 ? "Everyone free" : `${fraction * 100}% free`));
+      els.groupWeekLegend.append(label);
+    }
+    els.groupWeekGrid.replaceChildren();
+    els.groupWeekGrid.style.gridTemplateColumns = `54px repeat(${weekly.days.length}, minmax(140px, 1fr))`;
+    els.groupWeekGrid.style.minWidth = `${54 + weekly.days.length * 140}px`;
+    const axis = document.createElement("div"); axis.className = "review-time-axis";
+    for (const minute of [weekly.start, ...Array.from({ length: 12 }, (_, i) => (i + 9) * 60).filter(value => value < weekly.end - 25), weekly.end]) {
+      const label = document.createElement("span"); label.textContent = minuteTime(minute);
+      label.style.top = `${minute - weekly.start + 48}px`; axis.append(label);
+    }
+    els.groupWeekGrid.append(axis);
+    for (const day of weekly.days) {
+      const column = document.createElement("div"); column.className = "review-day";
+      const heading = document.createElement("div"); heading.className = "review-day-heading group-day-heading"; heading.textContent = day;
+      const track = document.createElement("div"); track.className = "review-day-track"; track.style.height = `${weekly.end - weekly.start}px`;
+      if (total) for (const segment of weekly.availability[day]) {
+        const block = document.createElement("button"); block.type = "button"; block.className = "group-time-block";
+        block.dataset.available = String(segment.available.length); block.dataset.total = String(total); block.dataset.day = day;
+        block.dataset.start = minuteTime(segment.start); block.dataset.end = minuteTime(segment.end);
+        block.style.top = `${segment.start - weekly.start}px`; block.style.height = `${segment.end - segment.start}px`;
+        const colors = window.WhosFreeGroups.shade(segment.available.length, total);
+        block.style.backgroundColor = colors.background; block.style.color = colors.color;
+        const label = groupBlockLabel(segment, total);
+        block.textContent = segment.end - segment.start < 25 ? `${segment.available.length}/${total}` : `${label}\n${minuteTime(segment.start)}–${minuteTime(segment.end)}`;
+        block.title = `${day} ${minuteTime(segment.start)}–${minuteTime(segment.end)} · ${label}. Free: ${segment.available.map(displayName).join(", ") || "Nobody"}. Busy: ${segment.unavailable.map(displayName).join(", ") || "Nobody"}.`;
+        block.setAttribute("aria-label", block.title); block.setAttribute("aria-pressed", "false");
+        block.addEventListener("click", () => showGroupSlot(day, segment, total, block)); track.append(block);
+      }
+      column.append(heading, track); els.groupWeekGrid.append(column);
+    }
+    els.groupSlotDetails.textContent = total ? "Select a time block to see the people available." : "This group has no people. Edit the group to add members.";
+    els.groupWeekModal.hidden = false; document.body.style.overflow = "hidden";
+    els.closeGroupWeekModal.focus();
+    animateModalOpen(els.groupWeekModal, els.groupWeekModal.querySelector(".group-week-modal"));
+  }
+
+  function closeGroupWeek() {
+    els.groupWeekModal.hidden = true; state.weekGroupId = null;
+    if (els.scheduleModal.hidden && els.settingsModal.hidden && els.groupsModal.hidden) document.body.style.overflow = "";
+    const group = state.groupReturnFocus?.closest?.(".people-group");
+    const replacement = group ? [...els.peopleList.querySelectorAll(".people-group")].find(item => item.dataset.groupId === group.dataset.groupId)?.querySelector(".group-more") : null;
+    (replacement || els.showGroupsToggle).focus();
+  }
+
   function classesForDay(name, day) {
     const person = peopleMap()[name] || {};
     const classes = Array.isArray(person.classes) ? person.classes : [];
@@ -917,6 +1238,7 @@
   }
 
   function renderDataSetup() {
+    updateGroupToolbar();
     els.peopleHeading.textContent = "Who's Free?";
     els.freeCount.textContent = "Local only";
     els.statusLine.textContent = state.loadError
@@ -1350,6 +1672,7 @@
 
   async function persistCurrentDatabase(label = "Local schedule collection") {
     validateData(state.data);
+    cleanGroupPreferences();
     const meta = makeCollectionMeta(state.data, label);
     const record = { data: state.data, meta };
     let storageWarning = null;
@@ -1711,6 +2034,7 @@
     state.mutedPeople.delete(name);
     state.pinnedPeople.delete(name);
     delete state.nicknames[name];
+    cleanGroupPreferences();
     saveNotificationSettings();
     savePeoplePreferences();
     if (state.selectedPerson === name) state.selectedPerson = null;
@@ -1864,6 +2188,7 @@
     state.scheduleMeta = null;
     state.selectedPerson = null;
     state.loadError = null;
+    cleanGroupPreferences();
     closeScheduleModal();
     renderDataSetup();
     updateScheduleModal();
@@ -2157,6 +2482,7 @@
     }
 
     els.viewToggleButton.disabled = false;
+    updateGroupToolbar();
 
     if (state.useLiveTime) setLiveValues();
     syncLiveControls();
@@ -2172,7 +2498,7 @@
     const peopleCount = Object.keys(peopleMap()).length;
     const oldScroll = els.peopleList.scrollTop;
 
-    els.peopleHeading.textContent = state.showEveryone ? "Everyone" : state.useLiveTime ? "Free now" : "Free";
+    els.peopleHeading.textContent = state.showGroups ? "Groups" : state.showEveryone ? "Everyone" : state.useLiveTime ? "Free now" : "Free";
     els.viewToggleButton.textContent = state.showEveryone ? "Show only free" : "Show everyone";
     const nextFreeCountText = `${free.length} of ${peopleCount} free`;
     els.freeCount.textContent = nextFreeCountText;
@@ -2189,22 +2515,32 @@
       return;
     }
 
-    if (visible.length === 0) {
+    if (visible.length === 0 && !state.showGroups) {
       els.peopleList.append(createEmptyList("Nobody is free", "Try another time or choose Show everyone."));
       state.selectedPerson = null;
       renderEmptyDetail();
       return;
     }
 
-    if (state.selectedPerson && !visible.includes(state.selectedPerson)) {
-      state.selectedPerson = null;
-    }
+    let displayed = visible;
+    if (state.showGroups) {
+      const grouped = renderGroupedPeople(visible, day, minute);
+      displayed = grouped.visible;
+      const shownFree = free.filter(name => grouped.shown.has(name)).length;
+      const text = `${shownFree} of ${grouped.shown.size} free`;
+      els.freeCount.textContent = text;
+      els.statusLine.textContent = `${state.useLiveTime ? "Live · " : ""}${day} at ${formatTime(state.selectedTime)} · ${grouped.shown.size - shownFree} in class · Shown groups`;
+    } else visible.forEach(name => els.peopleList.append(renderPersonCard(name, day, minute)));
 
-    visible.forEach(name => els.peopleList.append(renderPersonCard(name, day, minute)));
+    if (state.selectedPerson && !displayed.includes(state.selectedPerson)) {
+      state.selectedPerson = null;
+      els.peopleList.querySelectorAll(".person-card.selected").forEach(card => { card.classList.remove("selected"); card.setAttribute("aria-pressed", "false"); });
+    }
 
     const peopleSignature = [
       state.showEveryone ? "all" : "free",
-      ...visible.map(name => `${name}:${currentClass(name, day, minute)?.course_code || (isFree(name, day, minute) ? "free" : "busy")}`),
+      state.showGroups ? JSON.stringify(state.groups) : "flat",
+      ...displayed.map(name => `${name}:${currentClass(name, day, minute)?.course_code || (isFree(name, day, minute) ? "free" : "busy")}`),
     ].join("|");
     animateCardsIfNeeded(peopleSignature);
     state.lastPeopleSignature = peopleSignature;
@@ -2231,6 +2567,21 @@
     });
     els.scheduleDataButton.addEventListener("click", openScheduleModal);
     els.settingsButton.addEventListener("click", openSettingsModal);
+    els.showGroupsToggle.addEventListener("click", () => {
+      state.showGroups = !state.showGroups;
+      saveGroupPreferences(); refresh({ preserveScroll: true });
+    });
+    els.manageGroupsButton.addEventListener("click", () => openGroupsModal());
+    els.closeGroupsModal.addEventListener("click", closeGroupsModal);
+    els.newGroupButton.addEventListener("click", () => editGroup());
+    els.groupForm.addEventListener("submit", saveGroup);
+    els.cancelGroupButton.addEventListener("click", cancelGroupEdit);
+    els.closeGroupWeekModal.addEventListener("click", closeGroupWeek);
+    els.editGroupFromWeekButton.addEventListener("click", () => {
+      const id = state.weekGroupId; closeGroupWeek(); openGroupsModal(id);
+    });
+    els.groupsModal.addEventListener("click", event => { if (event.target === els.groupsModal) closeGroupsModal(); });
+    els.groupWeekModal.addEventListener("click", event => { if (event.target === els.groupWeekModal) closeGroupWeek(); });
     els.closeScheduleModal.addEventListener("click", closeScheduleModal);
     els.closeSettingsModal.addEventListener("click", closeSettingsModal);
     els.breakNotificationToggle.addEventListener("change", handleNotificationToggle);
@@ -2268,8 +2619,17 @@
     });
 
     document.addEventListener("keydown", event => {
+      const groupModal = !els.groupWeekModal.hidden ? els.groupWeekModal : !els.groupsModal.hidden ? els.groupsModal : null;
+      if (event.key === "Tab" && groupModal) {
+        const focusable = [...groupModal.querySelectorAll('button, input, [tabindex="0"]')].filter(item => !item.disabled && !item.closest("[hidden]"));
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
       if (event.key !== "Escape") return;
-      if (!els.settingsModal.hidden) closeSettingsModal();
+      if (!els.groupWeekModal.hidden) closeGroupWeek();
+      else if (!els.groupsModal.hidden) closeGroupsModal();
+      else if (!els.settingsModal.hidden) closeSettingsModal();
       else if (!els.scheduleModal.hidden) closeScheduleModal();
     });
 
@@ -2313,7 +2673,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=15", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=16", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
@@ -2328,6 +2688,7 @@
     const savedPeoplePreferences = loadPeoplePreferences();
     state.nicknames = { ...savedPeoplePreferences.nicknames };
     state.pinnedPeople = new Set(savedPeoplePreferences.pinnedPeople);
+    Object.assign(state, loadGroupPreferences());
     state.accentTheme = loadAccentTheme();
 
     if (!("Notification" in window) || Notification.permission !== "granted") {
@@ -2347,6 +2708,8 @@
 
     loadSchedulesFromDevice().then(() => {
       cleanPeoplePreferences();
+      if (state.hasData) cleanGroupPreferences();
+      refresh({ preserveScroll: true });
       updateSettingsModal();
       checkBreakNotifications();
     });

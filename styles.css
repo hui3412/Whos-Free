@@ -2453,3 +2453,52 @@ input[type="time"],
 .share-code-field { margin-top: 14px; }
 .share-code-field textarea { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--input); color: var(--text); font: 16px/1.45 ui-monospace, monospace; resize: vertical; overflow-wrap: anywhere; }
 .share-code-note { font-size: 0.8rem; color: var(--muted); }
+
+/* Groups retain the original people cards and scroll inside the same panel. */
+.group-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px 4px; flex-wrap: wrap; }
+.group-toolbar [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.group-visibility { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 18px; }
+.group-visibility[hidden] { display: none; }
+.group-visibility-choice { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; background: var(--input); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; overflow-wrap: anywhere; cursor: pointer; }
+.group-visibility-choice input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--accent); }
+.people-group { margin: 8px 0 18px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.people-group-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 2px 2px 6px; }
+.people-group-header > div:first-child { min-width: 0; }
+.people-group-header h3 { margin: 0 0 4px; font-size: 1rem; overflow-wrap: anywhere; }
+.people-group-header small { color: var(--muted); font-size: 0.75rem; }
+.people-group-header p { margin: 6px 0 0; color: var(--text); font-size: 0.8rem; line-height: 1.5; }
+.people-group-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.people-group-actions .group-more { min-width: 36px; min-height: 32px; padding: 0 8px; font-size: 1.4rem; line-height: 1; }
+.group-empty { color: var(--muted); font-size: 0.85rem; padding: 8px 2px; line-height: 1.5; }
+.groups-manager-list { display: grid; gap: 10px; margin: 16px 0; }
+.group-manager-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.group-manager-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.group-manager-row small { display: block; color: var(--muted); margin-top: 5px; }
+.group-manager-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.group-form { border-top: 1px solid var(--border); padding-top: 20px; }
+.group-form p, .groups-manager-list > p { color: var(--muted); line-height: 1.5; font-size: 0.88rem; }
+.group-name-field { display: grid; gap: 7px; margin: 14px 0; font-size: 0.9rem; font-weight: 700; }
+.group-name-field input { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--border); background: var(--input); color: var(--text); border-radius: 8px; padding: 11px; font: inherit; font-size: 16px; }
+.group-members-list { max-height: 300px; overflow-y: auto; margin: 10px 0; }
+.group-week-modal { width: min(1120px, 100%); max-width: 1120px; }
+.groups-modal .modal-header > div, .group-week-modal .modal-header > div { min-width: 0; overflow-wrap: anywhere; }
+.group-week-modal .modal-header p { max-width: none; }
+.group-week-note { color: var(--muted); line-height: 1.5; font-size: 0.85rem; }
+.group-week-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.group-week-legend span { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.75rem; }
+.group-week-legend i { display: inline-block; width: 18px; height: 18px; border: 1px solid #789; border-radius: 4px; }
+.group-day-heading { display: flex; align-items: center; justify-content: center; cursor: default; font-weight: 700; }
+.group-week-grid .review-time-axis span { font-variant-numeric: tabular-nums; }
+.group-week-grid .review-day-track { background: var(--input); }
+.group-time-block { position: absolute; left: 2px; right: 2px; box-sizing: border-box; overflow: hidden; border: 1px solid rgba(30, 60, 110, 0.35); border-radius: 4px; font-family: inherit; font-size: 11px; line-height: 1.35; padding: 2px 4px; white-space: pre-line; text-align: left; cursor: pointer; }
+.group-time-block:hover { outline: 2px solid var(--accent); z-index: 1; }
+.group-time-block:focus-visible, .group-time-block[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 2; }
+.group-slot-details { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; overflow-wrap: anywhere; }
+.group-slot-details h3 { font-size: 1rem; margin: 0 0 8px; }
+.group-slot-details p { margin: 5px 0; line-height: 1.5; font-size: 0.85rem; }
+@media (max-width: 560px) {
+  .group-toolbar { padding-left: 12px; padding-right: 12px; }
+  .group-visibility { padding-left: 12px; padding-right: 12px; }
+  .group-manager-row { align-items: flex-start; flex-direction: column; }
+  .people-group { padding: 8px; }
+}
