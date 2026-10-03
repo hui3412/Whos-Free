@@ -36,15 +36,50 @@ test("joint availability uses school hours, preserves people at every transition
   assert.equal(api.nextShared(weekly, "Monday", 725).now, true);
 });
 
-test("short common overlaps remain visible but are not suggested as a shared break", () => {
+test("short common overlaps are retained in exact data but removed from the calendar", () => {
   const weekly = api.week({ members: ["A", "B"] }, {
     A: { classes: [item("08:15", "10:00", "Tuesday"), item("10:20", "20:05", "Tuesday")] },
     B: { classes: [item("08:15", "10:15", "Tuesday"), item("10:35", "20:05", "Tuesday")] },
   });
   const brief = weekly.availability.Tuesday.find(segment => segment.start === 615);
   assert.equal(brief.end, 620); assert.equal(brief.available.length, 2);
+  const display = api.smooth(weekly.availability.Tuesday);
+  assert.ok(display.every(block => block.end - block.start > 10));
+  assert.ok(!display.some(block => block.start === 615 && block.end === 620));
   const next = api.nextShared(weekly, "Tuesday", 600);
   assert.equal(next.day, "Wednesday"); assert.equal(next.start, 495);
+});
+
+test("ten-minute slivers extend the neighbor with the higher free count in either direction", () => {
+  const make = (start, end, count) => ({ start, end, available: Array.from({ length: count }, (_, i) => `Person ${i}`), unavailable: [] });
+  for (const [left, right] of [[5, 4], [4, 5]]) {
+    const raw = [make(540, 590, left), make(590, 600, 7), make(600, 660, right)];
+    const before = JSON.stringify(raw), blocks = api.smooth(raw);
+    assert.equal(JSON.stringify(raw), before, "exact availability must not be mutated");
+    assert.equal(blocks.length, 2);
+    const higher = blocks.find(block => block.available.length === 5);
+    assert.equal(higher.start, left === 5 ? 540 : 590);
+    assert.equal(higher.end, left === 5 ? 600 : 660);
+    assert.equal(higher.exact.length, 2);
+    assert.equal(higher.exact.find(part => part.start === 590).available.length, 7);
+  }
+});
+
+test("equal counts favor the previous block and eleven-minute transitions stay visible", () => {
+  const part = (start, end, available) => ({ start, end, available, unavailable: [] });
+  const blocks = api.smooth([part(540, 590, ["A"]), part(590, 600, ["A", "B"]), part(600, 660, ["B"])]);
+  assert.equal(blocks[0].end, 600); assert.deepEqual(plain(blocks[0].available), ["A"]);
+  const longer = api.smooth([part(540, 590, ["A"]), part(590, 601, ["A", "B"]), part(601, 660, ["B"])]);
+  assert.equal(longer.length, 3);
+});
+
+test("leading, trailing and consecutive short transitions disappear without creating gaps", () => {
+  const raw = [[495,500,0], [500,550,2], [550,555,0], [555,565,1], [565,1195,3], [1195,1205,0]].map(([start,end,count]) => ({ start, end, available: Array.from({length:count},(_,i)=>String(i)), unavailable: [] }));
+  const blocks = api.smooth(raw);
+  assert.equal(blocks[0].start, 495); assert.equal(blocks.at(-1).end, 1205);
+  blocks.forEach((block, i) => { assert.ok(block.end - block.start > 10); if(i) assert.equal(block.start, blocks[i-1].end); });
+  assert.deepEqual(plain(blocks.flatMap(block => block.exact)), raw);
+  assert.deepEqual(plain(api.smooth([])), []);
 });
 
 test("school-hour search wraps the week and includes only relevant weekend columns", () => {

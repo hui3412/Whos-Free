@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
   <div class="app-shell">
@@ -76,16 +76,12 @@
         <div class="people-heading-row">
           <h2 id="peopleHeading">Free now</h2>
           <div class="people-actions">
-            <button id="viewToggleButton" class="secondary-button compact" type="button">Show everyone</button>
+            <button id="showGroupsToggle" class="secondary-button view-icon-button" type="button" aria-label="Show groups" title="Show groups" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="visually-hidden" data-toggle-label>Show groups</span></button>
+            <button id="viewToggleButton" class="secondary-button view-icon-button" type="button" aria-label="Show everyone" title="Show everyone" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v3"/></svg><span class="visually-hidden" data-toggle-label>Show everyone</span></button>
             <span id="freeCount" class="count-badge">0 of 0 free</span>
           </div>
         </div>
 
-        <div class="group-toolbar">
-          <button id="showGroupsToggle" class="secondary-button compact" type="button" aria-pressed="false">Show groups</button>
-          <button id="manageGroupsButton" class="secondary-button compact" type="button">Manage groups</button>
-        </div>
-        <div id="groupVisibility" class="group-visibility" role="group" aria-label="Visible groups" hidden></div>
         <p id="statusLine" class="status-line" aria-live="polite">Checking this device for schedule data…</p>
 
         <div id="peopleList" class="people-list" role="list" aria-label="People"></div>
@@ -121,6 +117,14 @@
       </div>
 
       <div id="scheduleStorageStatus" class="storage-status"></div>
+
+      <section class="schedule-action-section" aria-labelledby="scheduleGroupsTitle">
+        <div class="section-kicker">Groups</div>
+        <h3 id="scheduleGroupsTitle">Organize your people</h3>
+        <p>Create or edit groups here. Choose which groups appear when the group view is on.</p>
+        <button id="manageGroupsButton" class="secondary-button" type="button">Manage groups</button>
+        <div id="groupVisibility" class="group-visibility" role="group" aria-label="Visible groups" hidden></div>
+      </section>
 
       <section class="schedule-action-section" aria-labelledby="addPictureTitle">
         <div class="section-kicker">From a picture</div>
@@ -319,11 +323,10 @@
         <div><div class="section-kicker">Group availability</div><h2 id="groupWeekTitle">Weekly availability</h2><p id="groupWeekSummary"></p></div>
         <button id="closeGroupWeekModal" class="modal-close" type="button" aria-label="Close group availability">×</button>
       </div>
-      <p class="group-week-note">Darker blocks mean more people are free. Ten-minute passing gaps count as busy. Select a block to see who is free or busy.</p>
+      <p class="group-week-note">Darker blocks mean more people are free. Transitions of 10 minutes or less blend into the neighboring block with more people free. Select a block to see exact times and people.</p>
       <div id="groupWeekLegend" class="group-week-legend" aria-label="Availability color key"></div>
       <div class="review-grid-scroll" tabindex="0" aria-label="Group weekly availability. Scroll horizontally for more days."><div id="groupWeekGrid" class="review-grid group-week-grid"></div></div>
       <section id="groupSlotDetails" class="group-slot-details" aria-live="polite"><p>Select a time block to see the people available.</p></section>
-      <button id="editGroupFromWeekButton" class="secondary-button" type="button">Edit group</button>
     </section>
   </div>
 
@@ -344,11 +347,11 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=16" defer></script>
-  <script src="schedule-image-parser.js?v=16" defer></script>
-  <script src="schedule-availability.js?v=16" defer></script>
-  <script src="schedule-share-code.js?v=16" defer></script>
-  <script src="schedule-groups.js?v=16" defer></script>
-  <script src="app.js?v=16" defer></script>
+  <script src="schedule-parser.js?v=17" defer></script>
+  <script src="schedule-image-parser.js?v=17" defer></script>
+  <script src="schedule-availability.js?v=17" defer></script>
+  <script src="schedule-share-code.js?v=17" defer></script>
+  <script src="schedule-groups.js?v=17" defer></script>
+  <script src="app.js?v=17" defer></script>
 </body>
 </html>

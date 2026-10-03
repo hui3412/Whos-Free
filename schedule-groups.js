@@ -59,6 +59,33 @@
     return null;
   }
 
+  function smooth(segments) {
+    // Change only the calendar's display. Exact periods remain attached for
+    // inspection, and nextShared continues to use the unmodified weekly data.
+    const blocks = segments.map(segment => ({ ...segment, exact: [segment] }));
+    const samePeople = (a, b) => a.available.length === b.available.length && a.available.every((name, i) => name === b.available[i]);
+    const joinAdjacent = () => {
+      for (let i = 1; i < blocks.length;) {
+        const left = blocks[i - 1], right = blocks[i];
+        if (left.end === right.start && samePeople(left, right)) {
+          left.end = right.end; left.exact.push(...right.exact); blocks.splice(i, 1);
+        } else i++;
+      }
+    };
+    joinAdjacent();
+    while (blocks.length > 1) {
+      const index = blocks.findIndex(block => block.end - block.start <= WhosFreeAvailability.PASSING_MINUTES);
+      if (index < 0) break;
+      const short = blocks[index], left = blocks[index - 1], right = blocks[index + 1];
+      // Prefer the higher free count; ties extend the previous block.
+      const target = !left ? right : !right ? left : left.available.length >= right.available.length ? left : right;
+      target.start = Math.min(target.start, short.start); target.end = Math.max(target.end, short.end);
+      target.exact = left === target ? [...target.exact, ...short.exact] : [...short.exact, ...target.exact];
+      blocks.splice(index, 1); joinAdjacent();
+    }
+    return blocks;
+  }
+
   function shade(count, total) {
     const fraction = total ? Math.min(1, Math.max(0, count / total)) : 0;
     const light = [240, 246, 255], dark = [28, 65, 123];
@@ -67,5 +94,5 @@
     const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
     return { background: `rgb(${rgb.join(", ")})`, color: luminance > 0.179 ? "#000" : "#fff" };
   }
-  globalThis.WhosFreeGroups = { SCHOOL_START, SCHOOL_END, membersOf, week, nextShared, shade };
+  globalThis.WhosFreeGroups = { SCHOOL_START, SCHOOL_END, membersOf, week, nextShared, smooth, shade };
 })();

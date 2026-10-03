@@ -31,16 +31,26 @@ async function app(groups = null, schedules = data) {
   };
   const prefs = () => JSON.parse(window.localStorage.getItem("whos-free-groups-v1"));
   const cards = () => [...el("peopleList").querySelectorAll(".person-name")].map(item => item.textContent.replace(" 📌", ""));
-  return { window, el, tick, create, prefs, cards };
+  const manage = () => {
+    if (el("scheduleModal").hidden) el("scheduleDataButton").click();
+    el("manageGroupsButton").click();
+    assert.equal(el("scheduleModal").hidden, true);
+  };
+  const finish = () => {
+    el("closeGroupsModal").click();
+    assert.equal(el("scheduleModal").hidden, false, "group manager returns to Schedules");
+    el("closeScheduleModal").click();
+  };
+  return { window, el, tick, create, prefs, cards, manage, finish };
 }
 
 test("multiple groups keep pins, individual visibility and a flat-list toggle without losing memberships", async () => {
-  const a = await app(); const { window, el, create, cards, prefs } = a;
+  const a = await app(); const { window, el, create, cards, prefs, manage, finish } = a;
   try {
     assert.deepEqual(cards(), ["Bob", "Cara", "Alice"]);
-    el("manageGroupsButton").click(); create("Lunch", ["Alice", "Bob"]); create("Club", ["Bob", "Cara"]);
-    el("closeGroupsModal").click();
-    assert.equal(el("showGroupsToggle").textContent, "Hide groups");
+    manage(); create("Lunch", ["Alice", "Bob"]); create("Club", ["Bob", "Cara"]);
+    finish();
+    assert.equal(el("showGroupsToggle").getAttribute("aria-label"), "Hide groups");
     assert.deepEqual(cards(), ["Bob", "Alice", "Bob", "Cara"]);
     assert.equal(el("freeCount").textContent, "1 of 3 free", "overlapping memberships must not count twice");
     assert.match(el("peopleList").textContent, /Next everyone free: 12:05 PM/);
@@ -48,7 +58,7 @@ test("multiple groups keep pins, individual visibility and a flat-list toggle wi
     assert.deepEqual(cards(), ["Bob", "Cara"]);
     assert.equal(el("freeCount").textContent, "1 of 2 free");
     el("showGroupsToggle").click();
-    assert.equal(el("showGroupsToggle").textContent, "Show groups");
+    assert.equal(el("showGroupsToggle").getAttribute("aria-label"), "Show groups");
     assert.deepEqual(cards(), ["Bob", "Cara", "Alice"]);
     assert.equal(el("peopleList").querySelectorAll(".people-group").length, 0);
     assert.deepEqual(prefs().groups[0].members, ["Bob", "Alice"]);
@@ -63,9 +73,9 @@ test("multiple groups keep pins, individual visibility and a flat-list toggle wi
 });
 
 test("weekly group grid shows exact people, school hours, weekend entries and darker all-free blocks", async () => {
-  const { window, el, create } = await app();
+  const { window, el, create, manage, finish } = await app();
   try {
-    el("manageGroupsButton").click(); create("Lunch", ["Alice", "Bob"]); el("closeGroupsModal").click();
+    manage(); create("Lunch", ["Alice", "Bob"]); finish();
     window.document.querySelector('[aria-label="View weekly availability for Lunch"]').click();
     assert.equal(el("groupWeekModal").hidden, false);
     assert.match(el("groupWeekSummary").textContent, /8:15 AM–8:05 PM/);
@@ -88,33 +98,34 @@ test("weekly group grid shows exact people, school hours, weekend entries and da
 
 test("group edits, saved visibility, empty groups and deleted people do not erase schedules", async () => {
   const saved = { showGroups: true, hideUngrouped: true, groups: [{ id: "one", name: "Lunch", members: ["Alice", "Bob", "Gone"], hidden: false }, { id: "two", name: "Club", members: ["Bob"], hidden: true }] };
-  const a = await app(saved); const { window, el, prefs, tick } = a;
+  const a = await app(saved); const { window, el, prefs, tick, manage, finish } = a;
   try {
     assert.deepEqual(prefs().groups[0].members, ["Alice", "Bob"]);
     assert.equal(el("groupVisibility").querySelector('[aria-label="Show Club"]').checked, false);
     assert.equal(el("groupVisibility").querySelector('[aria-label="Show Ungrouped people"]').checked, false);
     window.document.querySelector('[aria-label="View weekly availability for Lunch"]').click();
-    el("editGroupFromWeekButton").click(); el("groupNameInput").value = "New lunch";
+    el("closeGroupWeekModal").click(); manage();
+    window.document.querySelector('[aria-label="Edit group Lunch"]').click(); el("groupNameInput").value = "New lunch";
     for (const input of el("groupMembersList").querySelectorAll("input")) input.checked = input.dataset.person === "Bob";
     el("groupForm").dispatchEvent(new window.Event("submit", { cancelable: true }));
     assert.equal(prefs().groups[0].name, "New lunch"); assert.deepEqual(prefs().groups[0].members, ["Bob"]);
-    el("closeGroupsModal").click(); el("scheduleDataButton").click();
+    finish(); el("scheduleDataButton").click();
     window.document.querySelector('[aria-label="Remove Bob"]').click(); await tick();
     assert.deepEqual(prefs().groups[0].members, []); assert.deepEqual(prefs().groups[1].members, []);
     const stored = JSON.parse(window.localStorage.getItem("whos-free-local-schedules")).data.people;
     assert.deepEqual(Object.keys(stored).sort(), ["Alice", "Cara"]);
     el("closeScheduleModal").click();
     assert.match(el("peopleList").textContent, /Add people to find a shared break/);
-    el("manageGroupsButton").click(); window.document.querySelector('[aria-label="Delete group New lunch"]').click();
+    manage(); window.document.querySelector('[aria-label="Delete group New lunch"]').click();
     assert.equal(prefs().groups.length, 1);
     assert.deepEqual(Object.keys(JSON.parse(window.localStorage.getItem("whos-free-local-schedules")).data.people).sort(), ["Alice", "Cara"]);
   } finally { await window.happyDOM.abort(); }
 });
 
 test("group dialog validates duplicate names, saves safely and traps keyboard focus", async () => {
-  const { window, el, create, prefs } = await app();
+  const { window, el, create, prefs, manage, finish } = await app();
   try {
-    el("manageGroupsButton").click(); create("Study <friends>", ["Alice"]); create("STUDY <FRIENDS>", ["Bob"]);
+    manage(); create("Study <friends>", ["Alice"]); create("STUDY <FRIENDS>", ["Bob"]);
     assert.match(el("groupFormError").textContent, /already uses this name/); assert.equal(prefs().groups.length, 1);
     el("cancelGroupButton").focus();
     window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", cancelable: true }));
@@ -124,5 +135,45 @@ test("group dialog validates duplicate names, saves safely and traps keyboard fo
     assert.equal(el("groupsManagerList").querySelector("friends"), null);
     window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
     assert.equal(el("groupsModal").hidden, true);
+  } finally { await window.happyDOM.abort(); }
+});
+
+test("main view toggles are compact neighbors and group management is inside Schedules", async () => {
+  const { window, el, manage, finish } = await app();
+  try {
+    assert.equal(el("showGroupsToggle").parentElement, el("viewToggleButton").parentElement);
+    for (const id of ["showGroupsToggle", "viewToggleButton"]) {
+      assert.ok(el(id).querySelector('svg[aria-hidden="true"]'));
+      assert.ok(el(id).getAttribute("aria-label"));
+    }
+    assert.ok(el("scheduleModal").contains(el("manageGroupsButton")));
+    assert.ok(el("scheduleModal").contains(el("groupVisibility")));
+    assert.equal(el("groupWeekModal").querySelector("#editGroupFromWeekButton"), null);
+    el("showGroupsToggle").click(); assert.equal(el("showGroupsToggle").title, "Hide groups");
+    assert.ok(el("showGroupsToggle").querySelector("svg"), "toggling must keep the icon");
+    el("viewToggleButton").click(); assert.equal(el("viewToggleButton").title, "Show everyone");
+    manage(); finish();
+  } finally { await window.happyDOM.abort(); }
+});
+
+test("a merged ten-minute overlap is filled by the five-free neighbor, with exact details preserved", async () => {
+  const names = ["A", "B", "C", "D", "E", "F", "G"];
+  const schedules = { schema_version: 1, people: Object.fromEntries(names.map((name, i) => [name, { classes: i < 2 ? [item("08:15","09:35")] : i < 5 ? [item("09:45","11:05")] : [] }])) };
+  const { window, el, manage, finish, create } = await app(null, schedules);
+  try {
+    manage(); create("Seven", names); finish();
+    assert.match(el("peopleList").textContent, /Next everyone free: 11:05 AM/);
+    window.document.querySelector('[aria-label="View weekly availability for Seven"]').click();
+    const blocks = [...el("groupWeekGrid").querySelectorAll('.group-time-block[data-day="Monday"]')];
+    assert.ok(blocks.every(block => {
+      const minute = t => Number(t.slice(0,2))*60 + Number(t.slice(3));
+      return minute(block.dataset.end) - minute(block.dataset.start) > 10;
+    }));
+    const filled = blocks.find(block => block.dataset.start === "08:15");
+    assert.equal(filled.dataset.end, "09:45"); assert.equal(filled.dataset.available, "5");
+    assert.equal(blocks.find(block => block.dataset.start === "09:45").dataset.available, "4");
+    filled.click();
+    assert.match(el("groupSlotDetails").textContent, /9:35 AM–9:45 AM · Everyone free/);
+    assert.equal(el("groupSlotDetails").querySelectorAll(".group-exact-period").length, 2);
   } finally { await window.happyDOM.abort(); }
 });

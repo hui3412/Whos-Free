@@ -30,6 +30,7 @@
     editingGroupId: null,
     weekGroupId: null,
     groupReturnFocus: null,
+    groupFromSchedules: false,
     accentTheme: "blue",
     lastPeopleSignature: "",
     lastDetailPerson: null,
@@ -135,7 +136,6 @@
     groupWeekGrid: document.getElementById("groupWeekGrid"),
     groupSlotDetails: document.getElementById("groupSlotDetails"),
     closeGroupWeekModal: document.getElementById("closeGroupWeekModal"),
-    editGroupFromWeekButton: document.getElementById("editGroupFromWeekButton"),
     detailPanel: document.getElementById("detailPanel"),
     toast: document.getElementById("toast"),
     dataSetupTemplate: document.getElementById("dataSetupTemplate"),
@@ -852,17 +852,17 @@
   function updateGroupToolbar() {
     const focusLabel = els.groupVisibility.contains(document.activeElement) ? document.activeElement.getAttribute("aria-label") : null;
     els.showGroupsToggle.disabled = !state.hasData;
-    els.manageGroupsButton.disabled = !state.hasData;
-    els.showGroupsToggle.textContent = state.showGroups ? "Hide groups" : "Show groups";
-    els.showGroupsToggle.setAttribute("aria-pressed", String(state.showGroups));
-    els.groupVisibility.hidden = !state.showGroups || !state.hasData;
+    const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+    els.manageGroupsButton.disabled = !state.hasData || busy;
+    setViewToggle(els.showGroupsToggle, state.showGroups ? "Hide groups" : "Show groups", state.showGroups);
+    els.groupVisibility.hidden = !state.hasData || !state.groups.length;
     els.groupVisibility.replaceChildren();
     if (els.groupVisibility.hidden) return;
     const checkbox = (label, checked, onChange) => {
       const wrapper = document.createElement("label");
       wrapper.className = "group-visibility-choice";
       const input = document.createElement("input");
-      input.type = "checkbox"; input.checked = checked;
+      input.type = "checkbox"; input.checked = checked; input.disabled = busy;
       input.setAttribute("aria-label", `Show ${label}`);
       input.addEventListener("change", () => onChange(input.checked));
       wrapper.append(input, document.createTextNode(label));
@@ -873,6 +873,12 @@
       state.hideUngrouped = !checked; saveGroupPreferences(); refresh({ preserveScroll: true });
     });
     if (focusLabel) [...els.groupVisibility.querySelectorAll("input")].find(input => input.getAttribute("aria-label") === focusLabel)?.focus();
+  }
+
+  function setViewToggle(button, label, pressed) {
+    button.setAttribute("aria-label", label); button.title = label;
+    button.setAttribute("aria-pressed", String(pressed));
+    button.querySelector("[data-toggle-label]").textContent = label;
   }
 
   function renderGroupsManager() {
@@ -954,7 +960,10 @@
   }
 
   function openGroupsModal(id = null) {
+    if (state.isParsing || state.pendingImage || state.codeMode) return;
     state.groupReturnFocus = document.activeElement;
+    state.groupFromSchedules = !els.scheduleModal.hidden;
+    if (state.groupFromSchedules) els.scheduleModal.hidden = true;
     els.groupsModal.hidden = false; document.body.style.overflow = "hidden";
     renderGroupsManager();
     if (id || !state.groups.length) editGroup(id);
@@ -964,6 +973,8 @@
 
   function closeGroupsModal() {
     els.groupsModal.hidden = true;
+    if (state.groupFromSchedules) { els.scheduleModal.hidden = false; updateScheduleModal(); }
+    state.groupFromSchedules = false;
     if (els.scheduleModal.hidden && els.settingsModal.hidden && els.groupWeekModal.hidden) document.body.style.overflow = "";
     state.groupReturnFocus?.focus?.();
   }
@@ -993,7 +1004,9 @@
       copy.append(heading, count, detail);
       const actions = document.createElement("div"); actions.className = "people-group-actions";
       const hide = document.createElement("button"); hide.type = "button";
-      hide.className = "secondary-button compact"; hide.textContent = "Hide";
+      hide.className = "secondary-button group-hide";
+      hide.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.5 5.2A11 11 0 0 1 21 12a14 14 0 0 1-3.2 4.4M6.2 6.2A14 14 0 0 0 3 12c2.6 4.5 5.6 7 9 7a9 9 0 0 0 4-.9M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+      hide.title = `Hide group ${group.name}`;
       hide.setAttribute("aria-label", `Hide group ${group.name}`);
       hide.addEventListener("click", () => setGroupHidden(group, true));
       const more = document.createElement("button"); more.type = "button";
@@ -1041,10 +1054,20 @@
     els.groupWeekGrid.querySelectorAll(".group-time-block").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
     const title = document.createElement("h3");
     title.textContent = `${day} · ${formatTime(minuteTime(segment.start))}–${formatTime(minuteTime(segment.end))}`;
-    const summary = document.createElement("p"); summary.textContent = `${groupBlockLabel(segment, total)} · ${segment.end - segment.start} minutes`;
-    const free = document.createElement("p"); free.textContent = `Free: ${segment.available.map(displayName).join(", ") || "Nobody"}`;
-    const busy = document.createElement("p"); busy.textContent = `Busy: ${segment.unavailable.map(displayName).join(", ") || "Nobody"}`;
-    els.groupSlotDetails.replaceChildren(title, summary, free, busy);
+    els.groupSlotDetails.replaceChildren(title);
+    const parts = segment.exact || [segment];
+    if (parts.length > 1) {
+      const note = document.createElement("p"); note.textContent = "Short transitions are blended in the grid. Exact availability:";
+      els.groupSlotDetails.append(note);
+    }
+    for (const part of parts) {
+      const wrapper = document.createElement("section"); wrapper.className = "group-exact-period";
+      const summary = document.createElement("p");
+      summary.textContent = `${parts.length > 1 ? `${formatTime(minuteTime(part.start))}–${formatTime(minuteTime(part.end))} · ` : ""}${groupBlockLabel(part, total)} · ${part.end - part.start} minutes`;
+      const free = document.createElement("p"); free.textContent = `Free: ${part.available.map(displayName).join(", ") || "Nobody"}`;
+      const busy = document.createElement("p"); busy.textContent = `Busy: ${part.unavailable.map(displayName).join(", ") || "Nobody"}`;
+      wrapper.append(summary, free, busy); els.groupSlotDetails.append(wrapper);
+    }
     els.groupSlotDetails.scrollIntoView?.({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }
 
@@ -1075,7 +1098,7 @@
       const column = document.createElement("div"); column.className = "review-day";
       const heading = document.createElement("div"); heading.className = "review-day-heading group-day-heading"; heading.textContent = day;
       const track = document.createElement("div"); track.className = "review-day-track"; track.style.height = `${weekly.end - weekly.start}px`;
-      if (total) for (const segment of weekly.availability[day]) {
+      if (total) for (const segment of window.WhosFreeGroups.smooth(weekly.availability[day])) {
         const block = document.createElement("button"); block.type = "button"; block.className = "group-time-block";
         block.dataset.available = String(segment.available.length); block.dataset.total = String(total); block.dataset.day = day;
         block.dataset.start = minuteTime(segment.start); block.dataset.end = minuteTime(segment.end);
@@ -1085,6 +1108,7 @@
         const label = groupBlockLabel(segment, total);
         block.textContent = segment.end - segment.start < 25 ? `${segment.available.length}/${total}` : `${label}\n${minuteTime(segment.start)}–${minuteTime(segment.end)}`;
         block.title = `${day} ${minuteTime(segment.start)}–${minuteTime(segment.end)} · ${label}. Free: ${segment.available.map(displayName).join(", ") || "Nobody"}. Busy: ${segment.unavailable.map(displayName).join(", ") || "Nobody"}.`;
+        if (segment.exact.length > 1) block.title = `${day} ${minuteTime(segment.start)}–${minuteTime(segment.end)} · ${label} (transitions blended). Select for exact times and people.`;
         block.setAttribute("aria-label", block.title); block.setAttribute("aria-pressed", "false");
         block.addEventListener("click", () => showGroupSlot(day, segment, total, block)); track.append(block);
       }
@@ -2109,6 +2133,7 @@
   }
 
   function updateScheduleModal() {
+    updateGroupToolbar();
     const peopleCount = Object.keys(peopleMap()).length;
     renderPeopleManager();
     const importBusy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
@@ -2499,7 +2524,7 @@
     const oldScroll = els.peopleList.scrollTop;
 
     els.peopleHeading.textContent = state.showGroups ? "Groups" : state.showEveryone ? "Everyone" : state.useLiveTime ? "Free now" : "Free";
-    els.viewToggleButton.textContent = state.showEveryone ? "Show only free" : "Show everyone";
+    setViewToggle(els.viewToggleButton, state.showEveryone ? "Show only free" : "Show everyone", state.showEveryone);
     const nextFreeCountText = `${free.length} of ${peopleCount} free`;
     els.freeCount.textContent = nextFreeCountText;
     animateCountIfChanged(nextFreeCountText);
@@ -2577,9 +2602,6 @@
     els.groupForm.addEventListener("submit", saveGroup);
     els.cancelGroupButton.addEventListener("click", cancelGroupEdit);
     els.closeGroupWeekModal.addEventListener("click", closeGroupWeek);
-    els.editGroupFromWeekButton.addEventListener("click", () => {
-      const id = state.weekGroupId; closeGroupWeek(); openGroupsModal(id);
-    });
     els.groupsModal.addEventListener("click", event => { if (event.target === els.groupsModal) closeGroupsModal(); });
     els.groupWeekModal.addEventListener("click", event => { if (event.target === els.groupWeekModal) closeGroupWeek(); });
     els.closeScheduleModal.addEventListener("click", closeScheduleModal);
@@ -2673,7 +2695,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=16", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=17", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
