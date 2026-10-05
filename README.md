@@ -2,9 +2,17 @@
 
 A privacy-first static web app for comparing Marianopolis schedules.
 
-## Fork update — October 2, 2026
+## Fork updates — last updated October 5, 2026
 
-### Semester labels and recognition warnings — October 5, 2026
+Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.github.io/Whos-Free/).
+
+### Appearance, navigation and performance
+
+- **Clean styling:** Subtle filled backgrounds replace outlined containers across the main page, Schedules, Settings and groups. The existing layout and features remain, including notifications, nicknames, pins, mute controls and all five light/dark color themes.
+- **Automatic scrolling:** Manual entry, completed picture recognition and saved-schedule editing bring the review grid into view. Selecting or adding a busy block reveals its editor. Import/export panels, generated codes, group forms and selected group-availability details also scroll into view. Focus stays with the newly opened content, and scrolling respects reduced-motion preferences.
+- **Optimizations:** Availability calculations parse class times once, duplicate checks compare sorted busy intervals in one pass, and group calendars partition available and busy people in one traversal. These changes preserve the existing calculation results and duplicate threshold.
+
+### Semester labels and recognition warnings
 
 Adds automatic, optional semester labels and compact recognition warnings while retaining the current design and automatic panel scrolling.
 
@@ -14,15 +22,18 @@ Adds automatic, optional semester labels and compact recognition warnings while 
 - **Recognition uncertainty:** Picture recognition retains word confidence and flags a block if its length-weighted mean is below 70, or a word of at least three characters scores below 45. Missing confidence, unreadable text and multiple detected course codes also prompt review. These scores are OCR signals, not calibrated probabilities that a timetable is correct. Occupied times and break detection remain unchanged.
 - **Reviewing flags:** A small **⚠** appears immediately before the course name in each uncertain grid block. A short note immediately above **Save schedule** gives the number of uncertain detections and asks the user to double-check the flagged blocks. There are no jump buttons or review checkboxes. Flags remain available after saving and reopening, and Undo restores their previous state. Recognition metadata is preserved in local data and JSON exports; share codes carry schedules and semester labels, not the local review markers.
 
+### Duplicate picture uploads
+
 When saving a picture schedule with an existing name, choose **Replace**, **Keep both**, or **Cancel**. Matching ignores letter case and repeated spaces. Replace retains the existing name and its preferences; Keep both adds the next available numbered name. Cancel keeps the review open without saving. Each saved choice can be undone, and both JSON and share-code exports include the resulting schedules and semester labels.
 
-The current look, existing features and automatic scrolling into newly opened panels are retained.
 
-### Undo update — October 5, 2026
+### Undo recent changes
 
 **Undo** in the main header or **Schedules** reverses the last saved schedule change. It covers picture/manual saves, edits and renames, PDF batches, JSON and share-code imports, removing a person, and removing all local schedules. Each import is one change. Undo restores affected nicknames, pins, notification mutes and group memberships without reversing unrelated preference changes.
 
 The last **20 changes** are available for the current page session only; reloading clears the undo history, not the schedules. Canceled edits, invalid imports and imports that don't change schedules aren't recorded. Finish or cancel an open editor or code panel before undoing. Undo saves the restored schedules on this device, with a warning if browser storage is unavailable. History is never included in exports or share codes.
+
+### Schedule import, sharing and groups
 
 This fork adds on-device schedule picture recognition and an editable weekly grid.
 
@@ -31,7 +42,7 @@ This fork adds on-device schedule picture recognition and an editable weekly gri
 - **Manual entry:** **Enter schedule manually** opens a blank grid without running recognition. Labels, course codes, rooms and instructor names are optional.
 - **Break detection:** Availability follows occupied times, so unfamiliar course names do not prevent break detection. Athlete and conflict blocks count as busy time. Gaps of 10 minutes or less are passing time, so people remain unavailable between back-to-back classes. Only longer gaps count as breaks. Overlapping busy spans do not create false breaks; unclear or merged entries remain available for correction.
 - **Class and break times:** Cards show **This class ends at**, followed by the next real break’s start time. After the last class, they show when the person becomes free for the day.
-- **Share codes:** **Export** lets you select schedules and copy a self-contained code for messages. **Import** opens a pasted code on the recipient’s device. Codes use compressed data and dense Unicode text to keep messages short, require no cloud storage, and compare matching names by the overlap of their weekly busy times. More than 50% overlap skips a duplicate; 50% or less imports as Name 2, Name 3, and so on. Course wording does not affect the comparison, and existing schedules stay unchanged. Imported names can be edited in the people list. Copy the complete code, including its special characters. Older export codes must be regenerated.
+- **Share codes:** **Export** lets you select schedules and copy a self-contained code for messages. **Import** opens a pasted code on the recipient’s device. Codes use compressed data and dense Unicode text to keep messages short, require no cloud storage, and compare matching names by the overlap of their weekly busy times. More than 50% overlap skips a duplicate; 50% or less imports as Name 2, Name 3, and so on. Course wording does not affect the comparison, and existing schedules stay unchanged. Imported names can be edited in the people list. Copy the complete code, including its special characters. Codes from the earlier alphanumeric-only format must be regenerated. Existing Unicode codes without semester labels still import.
 - **Groups:** Create or edit groups in **Schedules → Manage groups**. People can belong to several groups; pins still sort them within each group. **Show groups** displays group sections with the next shared break longer than 10 minutes. The compact **All/Free** button comes before the group icon on the same line and remembers the last selected view on this device after reloading. Group visibility checkboxes appear on the main page only while groups are shown; a group’s eye icon can also hide it. **Hide groups** restores the usual list and keeps group membership saved. The **…** button opens a weekly availability grid from **8:15 AM to 8:05 PM**, matching the supplied school timetable. Weekend columns appear when group members have weekend classes. Darker blocks mean more people are free. Transitions of 10 minutes or less are absorbed into the neighboring block with the most people free; ties extend the previous block. Select a block for exact time intervals and the available and busy names. Shared-break suggestions continue to use the original times. Groups and visibility preferences stay on this device.
 - **Schedules layout:** Picture/manual entry, share codes and the people list come before the PDF and JSON import sections.
 - **Weekend support:** Saturday and Sunday entries affect availability and next-class details.
@@ -46,9 +57,9 @@ Recognition can make mistakes. Compare the detected busy times with the picture 
 
 Deploy the updated app files at the repository root, including `schedule-image-parser.js`, `schedule-availability.js`, `schedule-groups.js`, `schedule-share-code.js` and the complete `assets/ocr/` folder. Use HTTPS hosting such as GitHub Pages, or `http://localhost` for computer testing; opening `index.html` directly from Files may block recognition.
 
-The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This pending local update uses the `whos-free-shell-v27` cache; the original deployment and version notes below describe the earlier app.
+The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. The app shell updates through its service worker while retaining cached OCR assets. The original deployment and version notes below describe earlier releases.
 
-Three supplied schedules were checked. Automated tests cover short passing gaps, longer breaks and chains of back-to-back classes. Tests cover detection, corrections, manual entry, validation, cancellation and offline caching. The fork has also been reported working on an iPhone.
+Three supplied schedules were checked during picture-import development. The regression suite covers recognition and review, passing gaps and real breaks, manual entry, automatic scrolling and focus, groups, sharing and duplicate handling, semester labels, recognition warnings, undo, validation, cancellation and offline caching. The fork has also been reported working on an iPhone.
 
 ## What's new in v8
 
