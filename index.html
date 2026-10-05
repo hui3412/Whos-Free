@@ -39,6 +39,7 @@
       </div>
 
       <div class="header-actions">
+        <button id="undoChangesButton" class="secondary-button header-data-button" type="button" disabled title="No recent schedule changes to undo">Undo</button>
         <button id="scheduleDataButton" class="secondary-button header-data-button" type="button" title="Manage schedule data">Schedules</button>
         <button id="settingsButton" class="secondary-button header-data-button" type="button" title="Open settings">Settings</button>
       </div>
@@ -118,6 +119,11 @@
       </div>
 
       <div id="scheduleStorageStatus" class="storage-status"></div>
+
+      <div class="schedule-undo-row">
+        <button id="undoScheduleChangesButton" class="secondary-button" type="button" disabled aria-describedby="undoChangesStatus">Undo</button>
+        <p id="undoChangesStatus" class="status-line" aria-live="polite">No recent schedule changes. Undo keeps the last 20 saved changes until you reload.</p>
+      </div>
 
       <section class="schedule-action-section" aria-labelledby="scheduleGroupsTitle">
         <div class="section-kicker">Groups</div>

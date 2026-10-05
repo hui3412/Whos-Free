@@ -36,3 +36,4 @@ test("OCR assets are cached locally and missing assets never receive HTML", asyn
   assert.equal((await request("https://example.test/Whos-Free/missing.js")).type, "error");
   assert.equal(request("https://other.test/worker.min.js"), undefined);
 });
+

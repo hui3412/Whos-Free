@@ -4,6 +4,12 @@ A privacy-first static web app for comparing Marianopolis schedules.
 
 ## Fork update — October 2, 2026
 
+### Undo update — October 5, 2026
+
+**Undo** in the main header or **Schedules** reverses the last saved schedule change. It covers picture/manual saves, edits and renames, PDF batches, JSON and share-code imports, removing a person, and removing all local schedules. Each import is one change. Undo restores affected nicknames, pins, notification mutes and group memberships without reversing unrelated preference changes.
+
+The last **20 changes** are available for the current page session only; reloading clears the undo history, not the schedules. Canceled edits, invalid imports and imports that don't change schedules aren't recorded. Finish or cancel an open editor or code panel before undoing. Undo saves the restored schedules on this device, with a warning if browser storage is unavailable. History is never included in exports or share codes.
+
 This fork adds on-device schedule picture recognition and an editable weekly grid.
 
 - **Picture import:** JPG/JPEG, PNG and WebP screenshots are read locally with English/French OCR. Pictures and recognized schedule data are not sent to an OCR server or AI API.
@@ -26,7 +32,7 @@ Recognition can make mistakes. Compare the detected busy times with the picture 
 
 Deploy the updated app files at the repository root, including `schedule-image-parser.js`, `schedule-availability.js`, `schedule-groups.js`, `schedule-share-code.js` and the complete `assets/ocr/` folder. Use HTTPS hosting such as GitHub Pages, or `http://localhost` for computer testing; opening `index.html` directly from Files may block recognition.
 
-The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This fork uses the `whos-free-shell-v19` cache; the original deployment and version notes below describe the earlier app.
+The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This fork uses the `whos-free-shell-v20` cache; the original deployment and version notes below describe the earlier app.
 
 Three supplied schedules were checked. Automated tests cover short passing gaps, longer breaks and chains of back-to-back classes. Tests cover detection, corrections, manual entry, validation, cancellation and offline caching. The fork has also been reported working on an iPhone.
 

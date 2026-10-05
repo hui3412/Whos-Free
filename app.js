@@ -35,6 +35,7 @@
     lastPeopleSignature: "",
     lastDetailPerson: null,
     lastFreeCountText: "",
+    recentChanges: [],
   };
 
   const LOCAL_DB_NAME = "whos-free-local";
@@ -58,6 +59,9 @@
     darkThemeButton: document.getElementById("darkThemeButton"),
     scheduleDataButton: document.getElementById("scheduleDataButton"),
     settingsButton: document.getElementById("settingsButton"),
+    undoChangesButton: document.getElementById("undoChangesButton"),
+    undoScheduleChangesButton: document.getElementById("undoScheduleChangesButton"),
+    undoChangesStatus: document.getElementById("undoChangesStatus"),
     scheduleFileInput: document.getElementById("scheduleFileInput"),
     schedulePdfInput: document.getElementById("schedulePdfInput"),
     scheduleImageInput: document.getElementById("scheduleImageInput"),
@@ -732,6 +736,117 @@
 
   function peopleMap() {
     return state.data?.people && typeof state.data.people === "object" ? state.data.people : {};
+  }
+
+  // Session-only history: never include old schedules in exports or shared codes.
+  function scheduleUndoPreferences() {
+    return JSON.parse(JSON.stringify({
+      nicknames: state.nicknames,
+      pinnedPeople: [...state.pinnedPeople],
+      mutedPeople: [...state.mutedPeople],
+      groups: state.groups,
+    }));
+  }
+
+  function captureScheduleChange() {
+    return {
+      data: JSON.parse(JSON.stringify(state.data)),
+      hasData: state.hasData,
+      meta: state.scheduleMeta ? { ...state.scheduleMeta } : null,
+      selectedPerson: state.selectedPerson,
+      preferences: scheduleUndoPreferences(),
+    };
+  }
+
+  function rememberScheduleChange(before, label) {
+    if (before.hasData === state.hasData && JSON.stringify(before.data) === JSON.stringify(state.data)) return;
+    state.recentChanges.push({ ...before, label, afterPreferences: scheduleUndoPreferences() });
+    if (state.recentChanges.length > 20) state.recentChanges.shift();
+    updateUndoControls();
+  }
+
+  function updateUndoControls() {
+    const change = state.recentChanges.at(-1);
+    const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+    const label = change ? `Undo: ${change.label}` : "No recent schedule changes to undo";
+    for (const button of [els.undoChangesButton, els.undoScheduleChangesButton]) {
+      button.disabled = busy || !change;
+      button.title = label;
+      button.setAttribute("aria-label", label);
+    }
+    els.undoChangesStatus.textContent = change
+      ? `Last change: ${change.label}. ${state.recentChanges.length} change${state.recentChanges.length === 1 ? "" : "s"} available to undo until you reload.`
+      : "No recent schedule changes. Undo keeps the last 20 saved changes until you reload.";
+  }
+
+  function restoreSchedulePreferences(change) {
+    const before = change.preferences, after = change.afterPreferences;
+    // Reverse only preferences affected by this schedule change. Later changes
+    // to themes, pins, nicknames or unrelated group memberships stay intact.
+    for (const key of ["pinnedPeople", "mutedPeople"]) {
+      const oldNames = new Set(before[key]), newNames = new Set(after[key]);
+      for (const name of new Set([...oldNames, ...newNames])) {
+        if (oldNames.has(name) === newNames.has(name)) continue;
+        if (oldNames.has(name)) state[key].add(name);
+        else state[key].delete(name);
+      }
+    }
+    for (const name of new Set([...Object.keys(before.nicknames), ...Object.keys(after.nicknames)])) {
+      if (before.nicknames[name] === after.nicknames[name]) continue;
+      if (Object.prototype.hasOwnProperty.call(before.nicknames, name)) {
+        Object.defineProperty(state.nicknames, name, { value: before.nicknames[name], enumerable: true, writable: true, configurable: true });
+      } else delete state.nicknames[name];
+    }
+    for (const group of state.groups) {
+      const oldGroup = before.groups.find(item => item.id === group.id);
+      const newGroup = after.groups.find(item => item.id === group.id);
+      if (!oldGroup || !newGroup || JSON.stringify(oldGroup.members) === JSON.stringify(newGroup.members)) continue;
+      if (JSON.stringify(group.members) === JSON.stringify(newGroup.members)) {
+        group.members = [...oldGroup.members];
+      } else {
+        group.members = group.members.filter(name => !newGroup.members.includes(name) || oldGroup.members.includes(name));
+        for (const name of oldGroup.members) if (!newGroup.members.includes(name) && !group.members.includes(name)) group.members.push(name);
+      }
+    }
+    cleanPeoplePreferences();
+    cleanGroupPreferences();
+    savePeoplePreferences();
+    saveNotificationSettings();
+    saveGroupPreferences();
+  }
+
+  async function undoRecentScheduleChange() {
+    if (state.isParsing || state.pendingImage || state.codeMode || !state.recentChanges.length) return;
+    const change = state.recentChanges.at(-1);
+    state.isParsing = true;
+    updateScheduleModal();
+    let warning = null;
+    try {
+      if (change.hasData) {
+        try { await saveLocalScheduleRecord({ data: change.data, meta: change.meta }); }
+        catch (error) { warning = error.message; }
+      } else if (!await deleteLocalScheduleRecord()) {
+        warning = "Undo works for this session, but the browser couldn't remove the saved copy.";
+      }
+      state.data = JSON.parse(JSON.stringify(change.data));
+      state.hasData = change.hasData;
+      state.scheduleMeta = change.meta ? { ...change.meta } : null;
+      state.selectedPerson = change.selectedPerson;
+      state.loadError = null;
+      restoreSchedulePreferences(change);
+      state.recentChanges.pop();
+      state.lastPeopleSignature = "";
+      state.lastDetailPerson = null;
+      setParserStatus("");
+      setImageStatus("");
+      refresh({ preserveScroll: true });
+      showToast(warning || `Undid: ${change.label}`);
+    } catch (error) {
+      showToast(`Could not undo: ${error.message}`);
+    } finally {
+      state.isParsing = false;
+      updateScheduleModal();
+    }
   }
 
   function loadPeoplePreferences() {
@@ -1505,6 +1620,7 @@
     catch (error) { els.imageReviewError.textContent = error.message; return; }
     if (replacement && !window.confirm(`Replace the existing schedule for ${name} with these reviewed classes?`)) return;
     if (renamed) delete workingData.people[editingName];
+    const before = captureScheduleChange();
     state.isParsing = true;
     updateScheduleModal();
     try {
@@ -1520,6 +1636,7 @@
       }
       state.selectedPerson = name;
       const warning = await persistCurrentDatabase("Local schedule collection");
+      rememberScheduleChange(before, `${editingName ? "Edited" : replacement ? "Replaced" : "Added"} ${name}'s schedule`);
       clearImageReview();
       setImageStatus(`Saved ${classes.length} schedule entries for ${name} on this device.`, "success");
       showToast(warning || `Saved ${name}'s schedule`);
@@ -1744,6 +1861,7 @@
   }
 
   async function handleSchedulePdfs(event) {
+    if (state.isParsing || state.pendingImage || state.codeMode) return;
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     if (els.scheduleModal.hidden) openScheduleModal();
@@ -1756,6 +1874,7 @@
 
     state.isParsing = true;
     els.addSchedulePdfButton.disabled = true;
+    updateScheduleModal();
     els.importSchedulesButton.disabled = true;
     els.shareSchedulesButton.disabled = true;
     setParserStatus(`Reading ${files.length === 1 ? files[0].name : `${files.length} schedule PDFs`}…`, "working");
@@ -1784,9 +1903,11 @@
     }
 
     if (added || updated) {
+      const before = captureScheduleChange();
       state.data = workingData;
       state.selectedPerson = null;
       const warning = await persistCurrentDatabase("Local schedule collection");
+      rememberScheduleChange(before, `Imported ${added + updated} PDF schedule${added + updated === 1 ? "" : "s"}`);
       const resultParts = [];
       if (added) resultParts.push(`${added} added`);
       if (updated) resultParts.push(`${updated} updated`);
@@ -1956,8 +2077,10 @@
       validateData(result.data);
       let warning = null;
       if (result.added) {
+        const before = captureScheduleChange();
         state.data = result.data;
         warning = await persistCurrentDatabase("Local schedule collection");
+        rememberScheduleChange(before, `Imported ${result.added} schedule${result.added === 1 ? "" : "s"} from a code`);
       }
       const renameNote = result.renamed.length ? ` Imported different schedules as ${result.renamed.map(item => item.to).join(", ")}. You can edit their names in the people list.` : "";
       codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} matching schedules.${renameNote}`, warning ? "error" : "success");
@@ -1967,9 +2090,12 @@
   }
 
   async function handleLocalScheduleFile(event) {
+    if (state.isParsing || state.pendingImage || state.codeMode) return;
     const [file] = event.target.files || [];
     if (!file) return;
     const hadData = state.hasData;
+    state.isParsing = true;
+    updateScheduleModal();
 
     try {
       const text = await file.text();
@@ -1989,11 +2115,13 @@
       };
       validateData(merged);
 
+      const before = captureScheduleChange();
       state.data = merged;
       state.hasData = true;
       state.selectedPerson = null;
       state.loadError = null;
       const warning = await persistCurrentDatabase(hadData ? "Merged schedule collection" : file.name);
+      rememberScheduleChange(before, `Imported ${file.name}`);
 
       closeScheduleModal();
       updateScheduleModal();
@@ -2016,6 +2144,8 @@
       updateScheduleModal();
       openScheduleModal();
     } finally {
+      state.isParsing = false;
+      updateScheduleModal();
       event.target.value = "";
     }
   }
@@ -2063,10 +2193,15 @@
   }
 
   async function removePerson(name) {
+    if (state.isParsing || state.pendingImage || state.codeMode) return;
     if (!state.hasData || !Object.prototype.hasOwnProperty.call(state.data.people || {}, name)) return;
     const confirmed = window.confirm(`Remove ${displayName(name)} from this device?`);
     if (!confirmed) return;
 
+    const before = captureScheduleChange();
+    const label = `Removed ${displayName(name)}`;
+    state.isParsing = true;
+    updateScheduleModal();
     delete state.data.people[name];
     state.mutedPeople.delete(name);
     state.pinnedPeople.delete(name);
@@ -2083,6 +2218,8 @@
       state.hasData = false;
       state.scheduleMeta = null;
       state.loadError = null;
+      rememberScheduleChange(before, label);
+      state.isParsing = false;
       renderDataSetup();
       updateScheduleModal();
       updateSettingsModal();
@@ -2091,6 +2228,8 @@
     }
 
     const warning = await persistCurrentDatabase("Local schedule collection");
+    rememberScheduleChange(before, label);
+    state.isParsing = false;
     updateScheduleModal();
     updateSettingsModal();
     showToast(warning || `Removed ${displayName(name)}`);
@@ -2146,6 +2285,7 @@
   }
 
   function updateScheduleModal() {
+    updateUndoControls();
     updateGroupToolbar();
     const peopleCount = Object.keys(peopleMap()).length;
     renderPeopleManager();
@@ -2216,10 +2356,14 @@
   }
 
   async function removeSchedules() {
+    if (state.isParsing || state.pendingImage || state.codeMode) return;
     if (!state.hasData) return;
     const confirmed = window.confirm("Remove the schedules stored in this browser? You can add the JSON file again later.");
     if (!confirmed) return;
 
+    const before = captureScheduleChange();
+    state.isParsing = true;
+    updateScheduleModal();
     await deleteLocalScheduleRecord();
     state.data = { people: {} };
     state.hasData = false;
@@ -2227,6 +2371,8 @@
     state.selectedPerson = null;
     state.loadError = null;
     cleanGroupPreferences();
+    rememberScheduleChange(before, "Removed all local schedules");
+    state.isParsing = false;
     closeScheduleModal();
     renderDataSetup();
     updateScheduleModal();
@@ -2643,6 +2789,8 @@
     els.closeExportButton.addEventListener("click", closeCodePanels);
     els.closeImportButton.addEventListener("click", closeCodePanels);
     els.removeSchedulesButton.addEventListener("click", removeSchedules);
+    els.undoChangesButton.addEventListener("click", undoRecentScheduleChange);
+    els.undoScheduleChangesButton.addEventListener("click", undoRecentScheduleChange);
     els.scheduleFileInput.addEventListener("change", handleLocalScheduleFile);
     els.schedulePdfInput.addEventListener("change", handleSchedulePdfs);
 
