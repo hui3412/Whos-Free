@@ -18,6 +18,7 @@
     loadError: null,
     isParsing: false,
     pendingImage: null,
+    duplicatePicture: null,
     codeMode: null,
     imagePreviewUrl: null,
     notificationsEnabled: false,
@@ -81,6 +82,8 @@
     imageReviewClasses: document.getElementById("imageReviewClasses"),
     imageReviewError: document.getElementById("imageReviewError"),
     addReviewClassButton: document.getElementById("addReviewClassButton"),
+    duplicatePicturePrompt: document.getElementById("duplicatePicturePrompt"),
+    duplicatePictureMessage: document.getElementById("duplicatePictureMessage"),
     saveImageScheduleButton: document.getElementById("saveImageScheduleButton"),
     cancelImageScheduleButton: document.getElementById("cancelImageScheduleButton"),
     scheduleModal: document.getElementById("scheduleModal"),
@@ -1635,7 +1638,26 @@
     revealSection(els.imageReview, els.imageReviewName);
   }
 
+  function dismissDuplicatePicture(focus = false) {
+    state.duplicatePicture = null;
+    els.duplicatePicturePrompt.hidden = true;
+    updateScheduleModal();
+    if (focus) els.saveImageScheduleButton.focus({ preventScroll: true });
+  }
+
+  const normalizedScheduleName = name => name.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+
+  function nextPictureName(name, people) {
+    const existing = new Set(Object.keys(people).map(normalizedScheduleName));
+    for (let number = 2; ; number++) {
+      const suffix = ` ${number}`;
+      const candidate = name.slice(0, 120 - suffix.length).trimEnd() + suffix;
+      if (!existing.has(normalizedScheduleName(candidate))) return candidate;
+    }
+  }
+
   function clearImageReview() {
+    dismissDuplicatePicture();
     state.pendingImage = null;
     if (state.imagePreviewUrl) URL.revokeObjectURL(state.imagePreviewUrl);
     state.imagePreviewUrl = null;
@@ -1655,7 +1677,7 @@
     setImageStatus("Reading the picture on this device…");
     try {
       const result = await window.WhosFreeImageParser.parseScheduleImage(file, { onProgress: message => setImageStatus(message) });
-      state.pendingImage = result;
+      state.pendingImage = { ...result, isPicture: true };
       state.imagePreviewUrl = URL.createObjectURL(file);
       els.imageReviewPreview.src = state.imagePreviewUrl;
       els.imageReviewPreview.closest("details").hidden = false;
@@ -1679,10 +1701,11 @@
     }
   }
 
-  async function saveImageSchedule() {
-    if (!state.pendingImage || state.isParsing) return;
+  async function saveImageSchedule(decision = null) {
+    if (!state.pendingImage || state.isParsing || state.duplicatePicture) return;
     els.imageReviewError.textContent = "";
-    const name = els.imageReviewName.value.trim();
+    const requestedName = els.imageReviewName.value.trim();
+    let name = requestedName;
     if (!name) { els.imageReviewError.textContent = "Enter the person's name before saving."; els.imageReviewName.focus(); return; }
     const term = els.imageReviewSemester.value;
     const year = els.imageReviewYear.value;
@@ -1696,6 +1719,12 @@
     } : {}) }));
     // An empty manual schedule represents someone with no busy times.
     const workingData = state.hasData ? JSON.parse(JSON.stringify(state.data)) : { schema_version: 1, people: {} };
+    const isPicture = state.pendingImage.isPicture;
+    const matchingName = isPicture ? Object.keys(workingData.people).find(existing => normalizedScheduleName(existing) === normalizedScheduleName(name)) : null;
+    const approved = decision?.requestedName === requestedName && decision?.existingName === matchingName;
+    if (matchingName && approved) {
+      name = decision.action === "both" ? nextPictureName(requestedName, workingData.people) : matchingName;
+    }
     const editingName = state.pendingImage.editingName;
     const renamed = editingName && editingName !== name;
     const replacement = Object.prototype.hasOwnProperty.call(workingData.people, name);
@@ -1703,7 +1732,15 @@
     Object.defineProperty(workingData.people, name, { value: { ...state.pendingImage.person, source_file: state.pendingImage.person.source_file, semester, classes }, writable: true, enumerable: true, configurable: true });
     try { validateData(workingData); }
     catch (error) { els.imageReviewError.textContent = error.message; return; }
-    if (replacement && !window.confirm(`Replace the existing schedule for ${name} with these reviewed classes?`)) return;
+    if (matchingName && !approved) {
+      state.duplicatePicture = { requestedName, existingName: matchingName };
+      els.duplicatePictureMessage.textContent = `A schedule for ${matchingName} already exists. Replace it, keep both as ${nextPictureName(requestedName, workingData.people)}, or cancel?`;
+      els.duplicatePicturePrompt.hidden = false;
+      updateScheduleModal();
+      revealSection(els.duplicatePicturePrompt, els.duplicatePicturePrompt.querySelector('[data-duplicate-action="cancel"]'));
+      return;
+    }
+    if (!isPicture && replacement && !window.confirm(`Replace the existing schedule for ${name} with these reviewed classes?`)) return;
     if (renamed) delete workingData.people[editingName];
     const before = captureScheduleChange();
     state.isParsing = true;
@@ -2411,7 +2448,7 @@
     els.importSchedulesButton.disabled = importBusy;
     els.shareSchedulesButton.disabled = importBusy || !state.hasData || peopleCount === 0;
     els.removeSchedulesButton.disabled = importBusy || !state.hasData;
-    els.saveImageScheduleButton.disabled = state.isParsing;
+    els.saveImageScheduleButton.disabled = state.isParsing || Boolean(state.duplicatePicture);
     els.cancelImageScheduleButton.disabled = state.isParsing;
 
     if (state.hasData) {
@@ -2895,6 +2932,13 @@
       revealSection(card, card.querySelector('[data-field="course"]'));
     });
     els.saveImageScheduleButton.addEventListener("click", saveImageSchedule);
+    els.duplicatePicturePrompt.addEventListener("click", event => {
+      const button = event.target.closest("[data-duplicate-action]");
+      if (!button || !state.duplicatePicture) return;
+      const decision = { ...state.duplicatePicture, action: button.dataset.duplicateAction };
+      dismissDuplicatePicture(true);
+      if (decision.action !== "cancel") saveImageSchedule(decision);
+    });
     els.useCurrentSemesterButton.addEventListener("click", () => {
       setReviewSemester(undefined, true);
     });
@@ -2936,6 +2980,7 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
       if (event.key !== "Escape") return;
+      if (state.duplicatePicture) { event.preventDefault(); dismissDuplicatePicture(true); return; }
       if (!els.groupWeekModal.hidden) closeGroupWeek();
       else if (!els.groupsModal.hidden) closeGroupsModal();
       else if (!els.settingsModal.hidden) closeSettingsModal();
@@ -2984,7 +3029,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=26", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=27", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

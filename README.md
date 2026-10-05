@@ -14,6 +14,8 @@ Adds automatic, optional semester labels and compact recognition warnings while 
 - **Recognition uncertainty:** Picture recognition retains word confidence and flags a block if its length-weighted mean is below 70, or a word of at least three characters scores below 45. Missing confidence, unreadable text and multiple detected course codes also prompt review. These scores are OCR signals, not calibrated probabilities that a timetable is correct. Occupied times and break detection remain unchanged.
 - **Reviewing flags:** A small **⚠** appears immediately before the course name in each uncertain grid block. A short note immediately above **Save schedule** gives the number of uncertain detections and asks the user to double-check the flagged blocks. There are no jump buttons or review checkboxes. Flags remain available after saving and reopening, and Undo restores their previous state. Recognition metadata is preserved in local data and JSON exports; share codes carry schedules and semester labels, not the local review markers.
 
+When saving a picture schedule with an existing name, choose **Replace**, **Keep both**, or **Cancel**. Matching ignores letter case and repeated spaces. Replace retains the existing name and its preferences; Keep both adds the next available numbered name. Cancel keeps the review open without saving. Each saved choice can be undone, and both JSON and share-code exports include the resulting schedules and semester labels.
+
 The current look, existing features and automatic scrolling into newly opened panels are retained.
 
 ### Undo update — October 5, 2026
@@ -44,7 +46,7 @@ Recognition can make mistakes. Compare the detected busy times with the picture 
 
 Deploy the updated app files at the repository root, including `schedule-image-parser.js`, `schedule-availability.js`, `schedule-groups.js`, `schedule-share-code.js` and the complete `assets/ocr/` folder. Use HTTPS hosting such as GitHub Pages, or `http://localhost` for computer testing; opening `index.html` directly from Files may block recognition.
 
-The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This pending local update uses the `whos-free-shell-v26` cache; the original deployment and version notes below describe the earlier app.
+The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This pending local update uses the `whos-free-shell-v27` cache; the original deployment and version notes below describe the earlier app.
 
 Three supplied schedules were checked. Automated tests cover short passing gaps, longer breaks and chains of back-to-back classes. Tests cover detection, corrections, manual entry, validation, cancellation and offline caching. The fork has also been reported working on an iPhone.
 
