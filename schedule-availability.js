@@ -7,11 +7,12 @@
     return hour < 24 && minute < 60 ? hour * 60 + minute : NaN;
   };
   function busyPeriods(classes) {
-    const sorted = classes.filter(item => Number.isFinite(minutes(item.start)) && minutes(item.end) > minutes(item.start))
-      .slice().sort((a, b) => minutes(a.start) - minutes(b.start));
+    // Parse once per class rather than again on every sort comparison.
+    const sorted = classes.map(item => ({ item, start: minutes(item.start), end: minutes(item.end) }))
+      .filter(({ start, end }) => Number.isFinite(start) && end > start)
+      .sort((a, b) => a.start - b.start);
     const periods = [];
-    for (const item of sorted) {
-      const start = minutes(item.start), end = minutes(item.end);
+    for (const { item, start, end } of sorted) {
       const previous = periods[periods.length - 1];
       if (previous && start - previous.end <= PASSING_MINUTES) {
         if (end > previous.end) { previous.end = end; previous.last = item; }

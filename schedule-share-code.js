@@ -194,7 +194,20 @@
     const left = busyPeriods(a), right = busyPeriods(b);
     const duration = periods => periods.reduce((sum, item) => sum + item.end - item.start, 0);
     let overlap = 0;
-    for (const x of left) for (const y of right) if (x.day === y.day) overlap += Math.max(0, Math.min(x.end, y.end) - Math.max(x.start, y.start));
+    // Busy periods are disjoint and ordered by weekday, then start time.
+    // Walk both lists once instead of comparing every pair of intervals.
+    let i = 0, j = 0;
+    while (i < left.length && j < right.length) {
+      const x = left[i], y = right[j];
+      if (x.day !== y.day) {
+        if (DAYS.indexOf(x.day) < DAYS.indexOf(y.day)) i++;
+        else j++;
+        continue;
+      }
+      overlap += Math.max(0, Math.min(x.end, y.end) - Math.max(x.start, y.start));
+      if (x.end <= y.end) i++;
+      else j++;
+    }
     const union = duration(left) + duration(right) - overlap;
     return union ? overlap / union : 1;
   }

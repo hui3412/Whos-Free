@@ -32,8 +32,8 @@
         for (const event of events.get(start)) {
           if (event.busy) busy.add(event.name); else busy.delete(event.name);
         }
-        const available = members.filter(name => !busy.has(name));
-        const unavailable = members.filter(name => busy.has(name));
+        const available = [], unavailable = [];
+        for (const name of members) (busy.has(name) ? unavailable : available).push(name);
         const previous = segments[segments.length - 1];
         if (previous && available.length === previous.available.length && available.every((name, index) => name === previous.available[index])) previous.end = end;
         else segments.push({ start, end, available, unavailable });
