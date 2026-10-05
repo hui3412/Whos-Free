@@ -229,6 +229,24 @@
     return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   }
 
+  // Reveal content inside its own dialog after layout and modal-open focus.
+  // Prevent focus from jumping to a different part of the scroll container.
+  function revealSection(section, focusTarget = null) {
+    requestAnimationFrame(() => {
+      if (!section?.isConnected || section.closest("[hidden]")) return;
+      focusTarget?.focus({ preventScroll: true });
+      const dialog = section.closest(".schedule-modal, .settings-modal");
+      const behavior = prefersReducedMotion() ? "auto" : "smooth";
+      if (dialog) {
+        const padding = parseFloat(getComputedStyle(dialog).paddingTop) || 16;
+        const top = dialog.scrollTop + section.getBoundingClientRect().top - dialog.getBoundingClientRect().top - padding;
+        dialog.scrollTo({ top: Math.max(0, top), behavior });
+      } else {
+        section.scrollIntoView?.({ block: "start", inline: "nearest", behavior });
+      }
+    });
+  }
+
   function canAnimate() {
     return Boolean(window.gsap) && !prefersReducedMotion();
   }
@@ -686,6 +704,7 @@
   function openSettingsModal() {
     updateSettingsModal();
     els.settingsModal.hidden = false;
+    els.settingsModal.querySelector(".settings-modal").scrollTop = 0;
     document.body.style.overflow = "hidden";
     requestAnimationFrame(() => {
       animateModalOpen(els.settingsModal, els.settingsModal.querySelector(".settings-modal"));
@@ -1046,7 +1065,7 @@
       label.append(input, document.createTextNode(displayName(name)));
       els.groupMembersList.append(label);
     }
-    els.groupNameInput.focus();
+    revealSection(els.groupForm, els.groupNameInput);
   }
 
   function cancelGroupEdit() {
@@ -1183,7 +1202,7 @@
       const busy = document.createElement("p"); busy.textContent = `Busy: ${part.unavailable.map(displayName).join(", ") || "Nobody"}`;
       wrapper.append(summary, free, busy); els.groupSlotDetails.append(wrapper);
     }
-    els.groupSlotDetails.scrollIntoView?.({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    revealSection(els.groupSlotDetails);
   }
 
   function openGroupWeek(id, trigger = document.activeElement) {
@@ -1507,7 +1526,11 @@
       add.className = "review-day-heading";
       add.textContent = `${day} +`;
       add.setAttribute("aria-label", `Add busy block on ${day}`);
-      add.addEventListener("click", () => addReviewClass({ day, start: "08:15", end: "09:35", kind: "busy_block" }));
+      add.addEventListener("click", () => {
+        addReviewClass({ day, start: "08:15", end: "09:35", kind: "busy_block" });
+        const card = els.imageReviewClasses.lastElementChild;
+        revealSection(card, card.querySelector('[data-field="course"]'));
+      });
       const track = document.createElement("div");
       track.className = "review-day-track";
       track.style.height = `${last - first}px`;
@@ -1534,7 +1557,7 @@
         block.textContent = `${card.dataset.warning ? "⚠ " : ""}${clock(start)}–${clock(end)} ${reviewValue(card, "course") || "Busy block"}`;
         block.title = `${day} ${block.textContent}. ${card.dataset.warning || "Select to edit."}`;
         block.setAttribute("aria-label", block.title);
-        block.addEventListener("click", () => { selectReviewCard(card); card.scrollIntoView?.({ block: "nearest" }); card.querySelector('[data-field="course"]').focus(); });
+        block.addEventListener("click", () => { selectReviewCard(card); revealSection(card, card.querySelector('[data-field="course"]')); });
         track.append(block);
         occupiedUntil = Math.max(occupiedUntil ?? end, end);
       }
@@ -1555,7 +1578,7 @@
     openScheduleModal();
     updateScheduleModal();
     setImageStatus("Add busy times using a day’s + button. Empty time is free; labels are optional.", "success");
-    els.imageReviewName.focus();
+    revealSection(els.imageReview, els.imageReviewName);
   }
 
   function clearImageReview() {
@@ -1590,7 +1613,7 @@
       if (els.scheduleModal.hidden) openScheduleModal();
       const busyCount = result.person.classes.filter(item => item.kind === "busy_block").length;
       setImageStatus(`${result.person.classes.length - busyCount} classes${busyCount ? ` and ${busyCount} other busy blocks` : ""} recognized. Check the schedule below before saving.`, "success");
-      document.getElementById("imageReviewTitle").focus();
+      revealSection(els.imageReview, document.getElementById("imageReviewTitle"));
     } catch (error) {
       if (state.pendingImage) clearImageReview();
       setImageStatus(error.message || "The picture could not be read. Try a clear screenshot.", "error");
@@ -2025,11 +2048,11 @@
         els.exportPeopleList.append(label);
       }
       exportSelectionChanged();
-      els.selectAllSchedules.focus();
+      revealSection(els.codeExportPanel, els.selectAllSchedules);
     } else {
       els.importCodeInput.value = "";
       codeStatus(els.importCodeStatus, "");
-      els.importCodeInput.focus();
+      revealSection(els.codeImportPanel, els.importCodeInput);
     }
     updateScheduleModal();
   }
@@ -2046,6 +2069,7 @@
       const code = await window.WhosFreeShareCode.encode({ people });
       els.exportCodeOutput.value = code;
       codeStatus(els.exportCodeStatus, `Code ready for ${names.length} schedule${names.length === 1 ? "" : "s"} · ${code.length.toLocaleString()} characters. Copy it and send it to your friend.`, "success");
+      revealSection(els.exportCodeOutput.closest(".field-group"));
     } catch (error) {
       els.exportCodeOutput.value = "";
       codeStatus(els.exportCodeStatus, error.message || "The code could not be created.", "error");
@@ -2339,9 +2363,12 @@
   }
 
   function openScheduleModal() {
+    const wasHidden = els.scheduleModal.hidden;
     updateScheduleModal();
     els.scheduleModal.hidden = false;
     document.body.style.overflow = "hidden";
+    if (!wasHidden) return;
+    els.scheduleModal.querySelector(".schedule-modal").scrollTop = 0;
     requestAnimationFrame(() => {
       animateModalOpen(els.scheduleModal, els.scheduleModal.querySelector(".schedule-modal"));
       els.closeScheduleModal.focus();
@@ -2772,7 +2799,11 @@
     els.addScheduleImageButton.addEventListener("click", chooseScheduleImage);
     els.scheduleImageInput.addEventListener("change", handleScheduleImage);
     els.manualScheduleButton.addEventListener("click", () => openManualSchedule());
-    els.addReviewClassButton.addEventListener("click", () => addReviewClass({ start: "08:15", end: "09:35", kind: "busy_block" }));
+    els.addReviewClassButton.addEventListener("click", () => {
+      addReviewClass({ start: "08:15", end: "09:35", kind: "busy_block" });
+      const card = els.imageReviewClasses.lastElementChild;
+      revealSection(card, card.querySelector('[data-field="course"]'));
+    });
     els.saveImageScheduleButton.addEventListener("click", saveImageSchedule);
     els.cancelImageScheduleButton.addEventListener("click", () => { clearImageReview(); setImageStatus("Schedule editing canceled. Nothing was saved.", ""); });
     els.importSchedulesButton.addEventListener("click", chooseScheduleFile);
@@ -2857,7 +2888,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=21", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=22", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
