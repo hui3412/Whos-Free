@@ -212,3 +212,32 @@ test("JSON and share-code imports retain Winter, default missing labels, and exp
     for (const name of Object.keys(stored().data.people)) assert.equal(json.people[name].semester, stored().data.people[name].semester);
   } finally { await window.happyDOM.abort(); }
 });
+
+
+test("main cards show only older semesters and the current-term shortcut retains every class", async () => {
+  const { window, el, tick, stored } = await app({ Old: { semester: "Winter 2026", classes: [slot] }, Current: { semester: "Fall 2026", classes: [slot] }, Future: { semester: "Winter 2027", classes: [] } });
+  try {
+    const card = name => [...el("peopleList").children].find(row => row.querySelector(".person-name")?.textContent.includes(name));
+    assert.match(card("Old").querySelector(".schedule-semester").textContent, /Winter 2026/);
+    assert.ok(card("Old").classList.contains("semester-expired"));
+    assert.equal(card("Current").querySelector(".schedule-semester"), null);
+    assert.equal(card("Future").querySelector(".schedule-semester"), null);
+    card("Current").click();
+    assert.match(el("detailPanel").textContent, /Fall 2026/);
+    window.document.querySelector('[aria-label="Edit Old"]').click();
+    assert.equal(el("useCurrentSemesterButton").hidden, false);
+    el("useCurrentSemesterButton").click();
+    assert.equal(el("imageReviewSemester").value, "Fall");
+    assert.equal(el("imageReviewYear").value, "2026");
+    assert.equal(stored().data.people.Old.semester, "Winter 2026", "changes wait for the editor save");
+    el("saveImageScheduleButton").click(); await tick();
+    assert.equal(stored().data.people.Old.semester, "Fall 2026");
+    assert.deepEqual(stored().data.people.Old.classes.map(({ day, start, end, course }) => ({ day, start, end, course })), [slot]);
+    assert.equal(card("Old").classList.contains("semester-expired"), false);
+    assert.equal(card("Old").querySelector(".schedule-semester"), null);
+    el("undoChangesButton").click(); await tick();
+    assert.equal(stored().data.people.Old.semester, "Winter 2026");
+    window.document.querySelector('[aria-label="Edit Current"]').click();
+    assert.equal(el("useCurrentSemesterButton").hidden, true);
+  } finally { await window.happyDOM.abort(); }
+});

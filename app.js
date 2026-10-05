@@ -73,6 +73,7 @@
     imageReviewName: document.getElementById("imageReviewName"),
     imageReviewSemester: document.getElementById("imageReviewSemester"),
     imageReviewYear: document.getElementById("imageReviewYear"),
+    useCurrentSemesterButton: document.getElementById("useCurrentSemesterButton"),
     recognitionReviewNotice: document.getElementById("recognitionReviewNotice"),
     recognitionReviewSummary: document.getElementById("recognitionReviewSummary"),
     imageReviewPreview: document.getElementById("imageReviewPreview"),
@@ -785,6 +786,7 @@
     els.imageReviewSemester.value = match ? match[1] : isNew ? current.term : "";
     els.imageReviewYear.value = match ? match[2] : String(current.year);
     els.imageReviewYear.disabled = !els.imageReviewSemester.value;
+    els.useCurrentSemesterButton.hidden = !semesterIsOlder(label);
   }
 
   function applyAutomaticSemester(data) {
@@ -2527,7 +2529,7 @@
     }
 
     copy.append(personName, detail);
-    if (peopleMap()[name].semester) {
+    if (semesterIsOlder(peopleMap()[name].semester)) {
       const label = document.createElement("span");
       label.className = `schedule-semester${semesterIsOlder(peopleMap()[name].semester) ? " semester-older" : ""}`;
       label.textContent = scheduleLabel(peopleMap()[name]);
@@ -2892,6 +2894,9 @@
       revealSection(card, card.querySelector('[data-field="course"]'));
     });
     els.saveImageScheduleButton.addEventListener("click", saveImageSchedule);
+    els.useCurrentSemesterButton.addEventListener("click", () => {
+      setReviewSemester(undefined, true);
+    });
     els.imageReviewSemester.addEventListener("change", () => { els.imageReviewYear.disabled = !els.imageReviewSemester.value; });
     els.cancelImageScheduleButton.addEventListener("click", () => { clearImageReview(); setImageStatus("Schedule editing canceled. Nothing was saved.", ""); });
     els.importSchedulesButton.addEventListener("click", chooseScheduleFile);
@@ -2976,7 +2981,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=24", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=25", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

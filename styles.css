@@ -2443,3 +2443,9 @@ button:disabled { cursor: not-allowed; }
   .header-data-button { padding-left: 10px; padding-right: 10px; }
   .header-data-button svg { width: 15px; height: 15px; }
 }
+
+.review-semester-fields:has(#useCurrentSemesterButton:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; }
+@media (max-width: 600px) {
+  .review-semester-fields:has(#useCurrentSemesterButton:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #useCurrentSemesterButton { grid-column: 1 / -1; }
+}

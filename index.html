@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=24">
+  <link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
   <div class="app-shell">
@@ -150,6 +150,7 @@
         <div class="review-semester-fields">
           <label class="field-group"><span>Semester</span><select id="imageReviewSemester"><option value="">Not set</option><option>Winter</option><option>Fall</option></select></label>
           <label class="field-group"><span>Year</span><input id="imageReviewYear" type="number" min="2000" max="2099" step="1" inputmode="numeric" aria-describedby="semesterHelp"></label>
+          <button id="useCurrentSemesterButton" class="secondary-button" type="button" hidden>Use current semester</button>
         </div>
         <p id="semesterHelp" class="semester-help">Semester is suggested automatically. Change it or choose Not set before saving.</p>
         <div class="review-grid-scroll" tabindex="0" aria-label="Weekly schedule. Scroll horizontally for more days."><div id="reviewGrid" class="review-grid"></div></div>
@@ -359,11 +360,11 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=24" defer></script>
-  <script src="schedule-image-parser.js?v=24" defer></script>
-  <script src="schedule-availability.js?v=24" defer></script>
-  <script src="schedule-share-code.js?v=24" defer></script>
-  <script src="schedule-groups.js?v=24" defer></script>
-  <script src="app.js?v=24" defer></script>
+  <script src="schedule-parser.js?v=25" defer></script>
+  <script src="schedule-image-parser.js?v=25" defer></script>
+  <script src="schedule-availability.js?v=25" defer></script>
+  <script src="schedule-share-code.js?v=25" defer></script>
+  <script src="schedule-groups.js?v=25" defer></script>
+  <script src="app.js?v=25" defer></script>
 </body>
 </html>
