@@ -46,6 +46,7 @@
   const NOTIFICATION_SETTINGS_KEY = "whos-free-notification-settings-v1";
   const NOTIFICATION_HISTORY_KEY = "whos-free-notification-history-v1";
   const PEOPLE_PREFERENCES_KEY = "whos-free-people-preferences-v1";
+  const VIEW_PREFERENCE_KEY = "whos-free-view-mode-v1";
   const GROUP_PREFERENCES_KEY = "whos-free-groups-v1";
   const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
   const ACCENT_THEMES = new Set(["blue", "violet", "rose", "mint", "orange"]);
@@ -2967,6 +2968,8 @@
 
     els.viewToggleButton.addEventListener("click", () => {
       state.showEveryone = !state.showEveryone;
+      try { localStorage.setItem(VIEW_PREFERENCE_KEY, state.showEveryone ? "all" : "free"); }
+      catch { /* Keep the filter usable when browser storage is unavailable. */ }
       state.selectedPerson = null;
       refresh();
     });
@@ -2981,7 +2984,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=25", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=26", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
@@ -2989,6 +2992,8 @@
   }
 
   function init() {
+    try { state.showEveryone = localStorage.getItem(VIEW_PREFERENCE_KEY) === "all"; }
+    catch { state.showEveryone = false; }
     const savedNotificationSettings = loadNotificationSettings();
     state.notificationsEnabled = savedNotificationSettings.enabled;
     state.mutedPeople = new Set(savedNotificationSettings.mutedPeople);
