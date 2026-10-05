@@ -20,7 +20,7 @@ async function app(people = {}, date = "2026-10-05T12:00:00") {
   const RealDate = window.Date;
   window.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [date])); } };
   window.localStorage.setItem("whos-free-local-schedules", JSON.stringify({ data: { schema_version: 1, people }, meta: {} }));
-  for (const file of ["schedule-availability.js", "schedule-groups.js", "app.js"]) window.eval(readSource(file));
+  for (const file of ["schedule-availability.js", "schedule-groups.js", "schedule-share-code.js", "app.js"]) window.eval(readSource(file));
   const tick = () => new Promise(resolve => setTimeout(resolve, 40));
   await tick();
   const el = id => window.document.getElementById(id);
@@ -35,14 +35,14 @@ test("semester labels distinguish earlier terms and unlabeled legacy schedules w
     assert.match(rows.find(row => row.textContent.includes("Old")).textContent, /Winter 2026 · Previous semester/);
     assert.doesNotMatch(rows.find(row => row.textContent.includes("Current")).textContent, /Previous semester/);
     assert.doesNotMatch(rows.find(row => row.textContent.includes("Future")).textContent, /Previous semester/);
-    assert.match(rows.find(row => row.textContent.includes("Legacy")).textContent, /Semester not set/);
+    assert.match(rows.find(row => row.textContent.includes("Legacy")).textContent, /Fall 2026/);
     el("liveToggle").checked = false; el("liveToggle").dispatchEvent(new window.Event("change"));
     el("daySelect").value = "Monday"; el("daySelect").dispatchEvent(new window.Event("change"));
     el("timeInput").value = "09:30"; el("timeInput").dispatchEvent(new window.Event("change"));
     assert.equal(el("freeCount").textContent, "0 of 4 free");
     window.document.querySelector('[aria-label="Edit Legacy"]').click();
-    assert.equal(el("imageReviewSemester").value, "");
-    assert.equal(el("imageReviewYear").disabled, true);
+    assert.equal(el("imageReviewSemester").value, "Fall");
+    assert.equal(el("imageReviewYear").disabled, false);
   } finally { await window.happyDOM.abort(); }
 });
 
@@ -54,7 +54,7 @@ test("semester assignment validates, survives saving and reopening, and can be u
     assert.equal(el("imageReviewYear").disabled, false);
     el("imageReviewYear").value = "1999"; el("saveImageScheduleButton").click();
     assert.match(el("imageReviewError").textContent, /2000 to 2099/);
-    assert.equal(stored().data.people.Legacy.semester, undefined);
+    assert.equal(stored().data.people.Legacy.semester, "Fall 2026");
     el("imageReviewYear").value = "2026"; el("saveImageScheduleButton").click(); await tick();
     assert.equal(stored().data.people.Legacy.semester, "Fall 2026");
     window.document.querySelector('[aria-label="Edit Legacy"]').click();
@@ -62,7 +62,7 @@ test("semester assignment validates, survives saving and reopening, and can be u
     assert.equal(el("imageReviewYear").value, "2026");
     el("cancelImageScheduleButton").click();
     el("undoChangesButton").click(); await tick();
-    assert.equal(stored().data.people.Legacy.semester, undefined);
+    assert.equal(stored().data.people.Legacy.semester, "Fall 2026");
     el("manualScheduleButton").click();
     assert.equal(el("imageReviewSemester").value, "Fall");
     el("imageReviewName").value = "New";
@@ -168,3 +168,47 @@ for (const [date, label] of [["2026-10-05", "Fall 2026"], ["2026-12-22", "Fall 2
     } finally { await window.happyDOM.abort(); }
   });
 }
+
+
+test("legacy local schedules receive a persisted term once and keep it after a rollover", async () => {
+  const first = await app({ Legacy: { classes: [slot] }, Winter: { semester: "Winter 2027", classes: [] }, Cleared: { semester: null, classes: [] } });
+  let people;
+  try {
+    people = first.stored().data.people;
+    assert.equal(people.Legacy.semester, "Fall 2026");
+    assert.equal(people.Winter.semester, "Winter 2027");
+    assert.equal(people.Cleared.semester, null);
+    assert.equal(first.el("undoChangesButton").disabled, true);
+  } finally { await first.window.happyDOM.abort(); }
+  const later = await app(people, "2027-01-20T12:00:00");
+  try {
+    assert.equal(later.stored().data.people.Legacy.semester, "Fall 2026");
+    const row = [...later.el("peopleList").children].find(row => row.textContent.includes("Legacy"));
+    assert.ok(row.classList.contains("semester-expired"));
+  } finally { await later.window.happyDOM.abort(); }
+});
+
+test("JSON and share-code imports retain Winter, default missing labels, and export the resulting labels", async () => {
+  const a = await app({}, "2027-01-20T12:00:00");
+  const { window, el, tick, stored } = a;
+  try {
+    const data = { people: { JsonWinter: { semester: "Winter 2026", classes: [slot] }, JsonLegacy: { classes: [] } } };
+    Object.defineProperty(el("scheduleFileInput"), "files", { value: [{ name: "legacy.json", text: async () => JSON.stringify(data) }], configurable: true });
+    el("scheduleFileInput").dispatchEvent(new window.Event("change")); await tick();
+    assert.equal(stored().data.people.JsonWinter.semester, "Winter 2026");
+    assert.equal(stored().data.people.JsonLegacy.semester, "Winter 2027");
+    const code = await window.WhosFreeShareCode.encode({ people: { CodeWinter: { semester: "Winter 2026", classes: [slot] }, CodeLegacy: { classes: [] }, CodeCleared: { semester: null, classes: [] } } });
+    el("importCodeButton").click(); el("importCodeInput").value = code; el("decodeCodeButton").click(); await tick();
+    assert.equal(stored().data.people.CodeWinter.semester, "Winter 2026");
+    assert.equal(stored().data.people.CodeLegacy.semester, "Winter 2027");
+    assert.equal(stored().data.people.CodeCleared.semester, null);
+    const roundtrip = await window.WhosFreeShareCode.decode(await window.WhosFreeShareCode.encode(stored().data));
+    for (const name of Object.keys(stored().data.people)) assert.equal(roundtrip.people[name].semester, stored().data.people[name].semester);
+    el("closeImportButton").click();
+    let exported;
+    window.URL.createObjectURL = file => { exported = file; return "blob:export"; };
+    el("shareSchedulesButton").click();
+    const json = JSON.parse(new TextDecoder().decode(await exported.arrayBuffer()));
+    for (const name of Object.keys(stored().data.people)) assert.equal(json.people[name].semester, stored().data.people[name].semester);
+  } finally { await window.happyDOM.abort(); }
+});

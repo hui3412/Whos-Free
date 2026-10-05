@@ -787,10 +787,9 @@
     els.imageReviewYear.disabled = !els.imageReviewSemester.value;
   }
 
-  function applyAutomaticSemester(data, preserveUnchanged = false) {
+  function applyAutomaticSemester(data) {
     const current = currentSemester();
-    for (const [name, person] of Object.entries(data.people || {})) {
-      if (preserveUnchanged && Object.prototype.hasOwnProperty.call(peopleMap(), name) && JSON.stringify(person) === JSON.stringify(peopleMap()[name])) continue;
+    for (const person of Object.values(data.people || {})) {
       if (person.semester === undefined) person.semester = `${current.term} ${current.year}`;
     }
     return data;
@@ -2189,7 +2188,7 @@
       const text = await file.text();
       const imported = JSON.parse(text);
       validateData(imported);
-      applyAutomaticSemester(imported, true);
+      applyAutomaticSemester(imported);
 
       const existingPeople = hadData ? (state.data.people || {}) : {};
       const importedPeople = imported.people || {};
@@ -2254,6 +2253,14 @@
       }
 
       validateData(record.data);
+      const needsSemesterMigration = Object.values(record.data.people || {}).some(person => person.semester === undefined);
+      applyAutomaticSemester(record.data);
+      // Persist the first assigned term so it stays attached after future rollovers.
+      let migrationWarning = null;
+      if (needsSemesterMigration) {
+        try { await saveLocalScheduleRecord(record); }
+        catch (error) { migrationWarning = error.message; }
+      }
       state.data = record.data;
       state.hasData = true;
       state.scheduleMeta = record.meta || {
@@ -2264,6 +2271,7 @@
       state.loadError = null;
       refresh();
       updateScheduleModal();
+      if (migrationWarning) showToast(`Semester labels assigned, but could not be saved: ${migrationWarning}`);
     } catch (error) {
       state.hasData = false;
       state.data = { people: {} };
@@ -2968,7 +2976,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=23", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=24", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

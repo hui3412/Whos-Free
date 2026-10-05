@@ -8,8 +8,8 @@ const peopleKey = "whos-free-people-preferences-v1";
 const groupsKey = "whos-free-groups-v1";
 const notificationsKey = "whos-free-notification-settings-v1";
 const fixture = { schema_version: 1, people: {
-  Alice: { classes: [{ day: "Monday", start: "09:00", end: "10:00", course: "Math" }] },
-  Bob: { classes: [] },
+  Alice: { semester: null, classes: [{ day: "Monday", start: "09:00", end: "10:00", course: "Math" }] },
+  Bob: { semester: null, classes: [] },
 } };
 
 async function app(data = fixture) {

@@ -76,7 +76,7 @@
       const name = normalizedName(person.n);
       if (names.has(name)) throw new Error("This code contains repeated person names.");
       names.add(name);
-      if (person.s !== undefined && (typeof person.s !== "string" || !/^(Winter|Fall) 20\d{2}$/.test(person.s))) throw new Error("A semester label in this code is not valid.");
+      if (person.s != null && (typeof person.s !== "string" || !/^(Winter|Fall) 20\d{2}$/.test(person.s))) throw new Error("A semester label in this code is not valid.");
       count += person.c.length;
       if (person.c.length > 500 || count > 10000) throw new Error("This code has too many schedule entries. Export fewer schedules at once.");
       for (const row of person.c) {
@@ -89,7 +89,7 @@
   function pack(data) {
     if (!data?.people || typeof data.people !== "object" || Array.isArray(data.people)) throw new Error("Select schedules to export.");
     const payload = { v: 1, p: Object.entries(data.people).map(([name, person]) => ({
-      n: name, ...(person.semester != null ? { s: person.semester } : {}), c: (person.classes || []).map(item => {
+      n: name, ...(person.semester !== undefined ? { s: person.semester } : {}), c: (person.classes || []).map(item => {
         const row = [DAYS.indexOf(item.day), item.start, item.end, ...FIELDS.map(key => item[key] || null), item.kind === "busy_block" ? "busy_block" : null];
         while (row.length > 3 && row[row.length - 1] == null) row.pop();
         return row;
