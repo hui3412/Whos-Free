@@ -21,8 +21,8 @@ test("OCR assets are cached locally and missing assets never receive HTML", asyn
   let installation;
   listeners.install({ waitUntil: promise => { installation = promise; } });
   await installation;
-  assert.ok(shell.includes("./schedule-share-code.js?v=19"), "share-code support must be cached for offline use");
-  assert.ok(shell.includes("./schedule-groups.js?v=19"), "group availability must work offline");
+  assert.ok(shell.includes("./schedule-share-code.js?v=23"), "share-code support must be cached for offline use");
+  assert.ok(shell.includes("./schedule-groups.js?v=23"), "group availability must work offline");
   function request(url, mode = "cors") {
     let result;
     listeners.fetch({ request: { url, mode, method: "GET" }, respondWith: promise => { result = promise; } });
@@ -36,4 +36,3 @@ test("OCR assets are cached locally and missing assets never receive HTML", asyn
   assert.equal((await request("https://example.test/Whos-Free/missing.js")).type, "error");
   assert.equal(request("https://other.test/worker.min.js"), undefined);
 });
-

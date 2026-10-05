@@ -76,6 +76,7 @@
       const name = normalizedName(person.n);
       if (names.has(name)) throw new Error("This code contains repeated person names.");
       names.add(name);
+      if (person.s !== undefined && (typeof person.s !== "string" || !/^(Winter|Fall) 20\d{2}$/.test(person.s))) throw new Error("A semester label in this code is not valid.");
       count += person.c.length;
       if (person.c.length > 500 || count > 10000) throw new Error("This code has too many schedule entries. Export fewer schedules at once.");
       for (const row of person.c) {
@@ -88,7 +89,7 @@
   function pack(data) {
     if (!data?.people || typeof data.people !== "object" || Array.isArray(data.people)) throw new Error("Select schedules to export.");
     const payload = { v: 1, p: Object.entries(data.people).map(([name, person]) => ({
-      n: name, c: (person.classes || []).map(item => {
+      n: name, ...(person.semester != null ? { s: person.semester } : {}), c: (person.classes || []).map(item => {
         const row = [DAYS.indexOf(item.day), item.start, item.end, ...FIELDS.map(key => item[key] || null), item.kind === "busy_block" ? "busy_block" : null];
         while (row.length > 3 && row[row.length - 1] == null) row.pop();
         return row;
@@ -104,7 +105,7 @@
       const compact = [row[0] | (row[8] === "busy_block" ? 8 : 0), time(row[1]), time(row[2]) - time(row[1]), ...row.slice(3, 8)];
       while (compact.length > 3 && compact[compact.length - 1] == null) compact.pop();
       return compact;
-    })]);
+    }), ...(person.s !== undefined ? [person.s] : [])]);
   }
   function unpackCompact(compact) {
     const invalid = () => { throw new Error("This code does not contain valid schedule data."); };
@@ -112,9 +113,9 @@
     let count = 0;
     const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
     const people = compact.map(person => {
-      if (!Array.isArray(person) || person.length !== 2 || !Array.isArray(person[1]) || person[1].length > 500) invalid();
+      if (!Array.isArray(person) || person.length < 2 || person.length > 3 || !Array.isArray(person[1]) || person[1].length > 500) invalid();
       count += person[1].length; if (count > 10000) invalid();
-      return { n: person[0], c: person[1].map(row => {
+      return { n: person[0], ...(person.length === 3 ? { s: person[2] } : {}), c: person[1].map(row => {
         if (!Array.isArray(row) || row.length < 3 || row.length > 8) invalid();
         const [day, start, duration] = row;
         if (!Number.isInteger(day) || day < 0 || day > 14 || (day & 7) > 6 || !Number.isInteger(start) || start < 0 || !Number.isInteger(duration) || duration <= 0 || start + duration > 1439) invalid();
@@ -169,7 +170,7 @@
     const payload = unpackCompact(compact);
     const people = Object.create(null);
     for (const person of payload.p) {
-      people[person.n] = { source_file: "Shared code", classes: person.c.map(row => ({
+      people[person.n] = { source_file: "Shared code", ...(person.s !== undefined ? { semester: person.s } : {}), classes: person.c.map(row => ({
         day: DAYS[row[0]], start: row[1], end: row[2],
         ...Object.fromEntries(FIELDS.map((key, index) => [key, row[index + 3] || null])),
         kind: row[8] || "class",

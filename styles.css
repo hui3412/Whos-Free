@@ -2390,6 +2390,13 @@ button:disabled { cursor: not-allowed; }
 .review-grid-block:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .review-class .field-group { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .review-class legend { font-weight: 500; }
+.review-semester-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+.review-semester-fields select, .review-semester-fields input { width: 100%; min-width: 0; }
+.semester-help, .schedule-semester { color: var(--muted); font-size: .86rem; line-height: 1.5; }
+.schedule-semester { display: block; margin: 5px 0 0; }
+.semester-older { color: var(--muted); }
+.person-card.semester-expired { background: var(--input); opacity: .6; }
+.person-card.semester-expired .person-status-dot { background: var(--muted); }
 .group-week-legend i, .group-time-block { border: 0; }
 .group-time-block:hover { outline: none; filter: brightness(.95); }
 .group-time-block:focus-visible, .group-time-block[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }

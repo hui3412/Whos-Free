@@ -267,7 +267,7 @@
           items.push({ text, x0, x1, y0, y1, cx: (x0 + x1) / 2, cy: group.cy, height: y1 - y0 });
         }
         const lines = globalThis.WhosFreeParser.groupScheduleLines(items.filter(item => item.cx >= rect.x0 && item.cx <= rect.x1 && item.cy > rect.y0 && item.cy < rect.y1), 2.8);
-        recognizedCells.push({ rect, lines });
+        recognizedCells.push({ rect, lines, words });
       }
       const starts = grid.items.filter((_, index) => index % 2 === 0).map(item => ({ time: item.text, y0: item.y0, y1: item.y1, center: item.cy }));
       const ends = grid.items.filter((_, index) => index % 2 === 1).map(item => ({ time: item.text, y0: item.y0, y1: item.y1, center: item.cy }));
@@ -284,9 +284,22 @@
 
   function classesFromCells(cells, starts, ends, rowHeight) {
     const classes = [];
-    for (const { rect, lines } of cells) {
+    for (const { rect, lines, words } of cells) {
       const codes = lines.join(" ").match(/\b[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{2}\b/gi) || [];
-      const warning = codes.length > 1 ? "Check this busy span: multiple courses were detected. Split it if needed." : !lines.length ? "Text unreadable: check these busy times." : null;
+      const warnings = [];
+      if (codes.length > 1) warnings.push("Check this busy span: multiple courses were detected. Split it if needed.");
+      if (!lines.length) warnings.push("Text unreadable: check these busy times.");
+      const scores = (words || []).filter(word => Number.isFinite(word.confidence) && word.confidence >= 0 && word.confidence <= 100);
+      const weight = scores.reduce((sum, word) => sum + Math.max(1, String(word.text || "").length), 0);
+      const confidence = weight ? scores.reduce((sum, word) => sum + word.confidence * Math.max(1, String(word.text || "").length), 0) / weight : null;
+      // OCR confidence is a text-reading signal, not a probability that the
+      // schedule is correct. Missing scores never imply reliable recognition.
+      if (confidence !== null && (confidence < 70 || scores.some(word => String(word.text || "").length >= 3 && word.confidence < 45))) {
+        warnings.push("Text recognition is uncertain. Check the wording and busy times against the picture.");
+      } else if (words?.length && scores.length !== words.length) {
+        warnings.push("Some text confidence is unavailable. Check this block against the picture.");
+      }
+      const warning = warnings.join(" ");
       const parsed = globalThis.WhosFreeParser.parseScheduleClassLines(lines);
       const label = lines.join(" ").trim();
       const busy = /^(?:athletes?\s+(?:student|etudiant)|confli(?:ct|t)\s*\d*)$/i.test(label.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
@@ -295,7 +308,7 @@
       delete parsed.explicitTime;
       if (busy || !parsed.course_code) parsed.course = label || "Busy block";
       if (times.end <= times.start) continue;
-      classes.push({ day: rect.day, ...times, ...parsed, kind: busy || !parsed.course_code ? "busy_block" : "class", ...(warning ? { review_warning: warning } : {}) });
+      classes.push({ day: rect.day, ...times, ...parsed, kind: busy || !parsed.course_code ? "busy_block" : "class", ...(confidence !== null ? { recognition_confidence: Math.round(confidence * 10) / 10 } : {}), ...(warning ? { review_warning: warning } : {}) });
     }
     classes.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.start.localeCompare(b.start));
     return classes;

@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=23">
 </head>
 <body>
   <div class="app-shell">
@@ -147,10 +147,16 @@
         <p>Select a busy block in the grid to edit its day, times or wording below. Use a day’s + button to add a block. Green gaps show breaks longer than 10 minutes. Gaps of 10 minutes or less are passing time between classes. Labels and course details are optional. Compare detected times with the picture before saving.</p>
         <details><summary>Show the original picture</summary><img id="imageReviewPreview" alt="Original schedule for comparison"></details>
         <label class="field-group review-name"><span>Person's name</span><input id="imageReviewName" type="text" maxlength="120" autocomplete="off" required></label>
+        <div class="review-semester-fields">
+          <label class="field-group"><span>Semester</span><select id="imageReviewSemester"><option value="">Not set</option><option>Winter</option><option>Fall</option></select></label>
+          <label class="field-group"><span>Year</span><input id="imageReviewYear" type="number" min="2000" max="2099" step="1" inputmode="numeric" aria-describedby="semesterHelp"></label>
+        </div>
+        <p id="semesterHelp" class="semester-help">Semester is suggested automatically. Change it or choose Not set before saving.</p>
         <div class="review-grid-scroll" tabindex="0" aria-label="Weekly schedule. Scroll horizontally for more days."><div id="reviewGrid" class="review-grid"></div></div>
         <div id="imageReviewClasses" class="review-classes"></div>
         <button id="addReviewClassButton" class="secondary-button" type="button">Add busy block</button>
         <div id="imageReviewError" class="parser-status" data-tone="error" role="alert"></div>
+        <div id="recognitionReviewNotice" hidden><p id="recognitionReviewSummary" class="parser-status" role="status" aria-live="polite"></p></div>
         <div class="modal-actions review-actions">
           <button id="saveImageScheduleButton" class="primary-button" type="button">Save schedule</button>
           <button id="cancelImageScheduleButton" class="secondary-button" type="button">Cancel</button>
@@ -353,11 +359,11 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=19" defer></script>
-  <script src="schedule-image-parser.js?v=19" defer></script>
-  <script src="schedule-availability.js?v=19" defer></script>
-  <script src="schedule-share-code.js?v=19" defer></script>
-  <script src="schedule-groups.js?v=19" defer></script>
-  <script src="app.js?v=22" defer></script>
+  <script src="schedule-parser.js?v=23" defer></script>
+  <script src="schedule-image-parser.js?v=23" defer></script>
+  <script src="schedule-availability.js?v=23" defer></script>
+  <script src="schedule-share-code.js?v=23" defer></script>
+  <script src="schedule-groups.js?v=23" defer></script>
+  <script src="app.js?v=23" defer></script>
 </body>
 </html>

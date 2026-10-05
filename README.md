@@ -4,6 +4,18 @@ A privacy-first static web app for comparing Marianopolis schedules.
 
 ## Fork update — October 2, 2026
 
+### Semester labels and recognition warnings — October 5, 2026
+
+Adds automatic, optional semester labels and compact recognition warnings while retaining the current design and automatic panel scrolling.
+
+- **Semester labels:** New manual, picture, PDF, JSON and shared-code schedules receive an automatic Fall or Winter label, such as **Fall 2026** or **Winter 2027**. In the schedule editor, change the term/year or choose **Not set** before saving. Existing unlabeled schedules and explicitly unset labels remain optional; an unchanged JSON reimport is preserved. Labels appear in the people list, schedule manager and person details. Earlier semesters appear greyed out in the people list and show **Previous semester**; their schedules remain accessible and availability calculations stay unchanged.
+- **Term timing:** Suggestions switch to the next semester during the end-of-term break: Winter from December 23 through May 31, and Fall from June 1 through December 22. These defaults follow the end-of-term deadlines in the [Marianopolis 2026–27 academic calendar](https://www.marianopolis.edu/wp-content/uploads/2026/03/academic_calendar_2026-2027.pdf). The app uses those same approximate windows each year, offline; it does not fetch changing school calendars. The label can be overridden or cleared in the editor.
+- **Saving and sharing:** Labels persist on the device, through Undo, and in JSON exports/imports and new share codes. Existing unlabeled share codes still work. A code containing semester labels requires this updated app or a later compatible version. The existing duplicate schedule rule is unchanged; importing a duplicate does not relabel the saved schedule.
+- **Recognition uncertainty:** Picture recognition retains word confidence and flags a block if its length-weighted mean is below 70, or a word of at least three characters scores below 45. Missing confidence, unreadable text and multiple detected course codes also prompt review. These scores are OCR signals, not calibrated probabilities that a timetable is correct. Occupied times and break detection remain unchanged.
+- **Reviewing flags:** A small **⚠** appears immediately before the course name in each uncertain grid block. A short note immediately above **Save schedule** gives the number of uncertain detections and asks the user to double-check the flagged blocks. There are no jump buttons or review checkboxes. Flags remain available after saving and reopening, and Undo restores their previous state. Recognition metadata is preserved in local data and JSON exports; share codes carry schedules and semester labels, not the local review markers.
+
+The current look, existing features and automatic scrolling into newly opened panels are retained.
+
 ### Undo update — October 5, 2026
 
 **Undo** in the main header or **Schedules** reverses the last saved schedule change. It covers picture/manual saves, edits and renames, PDF batches, JSON and share-code imports, removing a person, and removing all local schedules. Each import is one change. Undo restores affected nicknames, pins, notification mutes and group memberships without reversing unrelated preference changes.
@@ -32,7 +44,7 @@ Recognition can make mistakes. Compare the detected busy times with the picture 
 
 Deploy the updated app files at the repository root, including `schedule-image-parser.js`, `schedule-availability.js`, `schedule-groups.js`, `schedule-share-code.js` and the complete `assets/ocr/` folder. Use HTTPS hosting such as GitHub Pages, or `http://localhost` for computer testing; opening `index.html` directly from Files may block recognition.
 
-The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This fork uses the `whos-free-shell-v20` cache; the original deployment and version notes below describe the earlier app.
+The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. This pending local update uses the `whos-free-shell-v23` cache; the original deployment and version notes below describe the earlier app.
 
 Three supplied schedules were checked. Automated tests cover short passing gaps, longer breaks and chains of back-to-back classes. Tests cover detection, corrections, manual entry, validation, cancellation and offline caching. The fork has also been reported working on an iPhone.
 

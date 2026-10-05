@@ -71,6 +71,10 @@
     imageParserStatus: document.getElementById("imageParserStatus"),
     imageReview: document.getElementById("imageReview"),
     imageReviewName: document.getElementById("imageReviewName"),
+    imageReviewSemester: document.getElementById("imageReviewSemester"),
+    imageReviewYear: document.getElementById("imageReviewYear"),
+    recognitionReviewNotice: document.getElementById("recognitionReviewNotice"),
+    recognitionReviewSummary: document.getElementById("recognitionReviewSummary"),
     imageReviewPreview: document.getElementById("imageReviewPreview"),
     imageReviewClasses: document.getElementById("imageReviewClasses"),
     imageReviewError: document.getElementById("imageReviewError"),
@@ -755,6 +759,46 @@
 
   function peopleMap() {
     return state.data?.people && typeof state.data.people === "object" ? state.data.people : {};
+  }
+
+  function currentSemester() {
+    const date = new Date();
+    const month = date.getMonth(), year = date.getFullYear();
+    // Suggest the next term during the end-of-term breaks. Marianopolis's
+    // published 2026–27 calendar ends Fall on Dec 22 and Winter on May 31.
+    // Future years use the same approximate windows; labels remain editable.
+    if (month === 11 && date.getDate() >= 23) return { term: "Winter", year: year + 1 };
+    return { term: month >= 5 ? "Fall" : "Winter", year };
+  }
+
+  function semesterIsOlder(label) {
+    const match = /^(Winter|Fall) (20\d{2})$/.exec(label || "");
+    if (!match) return false;
+    const current = currentSemester();
+    return Number(match[2]) * 2 + ["Winter", "Fall"].indexOf(match[1])
+      < current.year * 2 + ["Winter", "Fall"].indexOf(current.term);
+  }
+
+  function setReviewSemester(label, isNew = false) {
+    const match = /^(Winter|Fall) (20\d{2})$/.exec(label || "");
+    const current = currentSemester();
+    els.imageReviewSemester.value = match ? match[1] : isNew ? current.term : "";
+    els.imageReviewYear.value = match ? match[2] : String(current.year);
+    els.imageReviewYear.disabled = !els.imageReviewSemester.value;
+  }
+
+  function applyAutomaticSemester(data, preserveUnchanged = false) {
+    const current = currentSemester();
+    for (const [name, person] of Object.entries(data.people || {})) {
+      if (preserveUnchanged && Object.prototype.hasOwnProperty.call(peopleMap(), name) && JSON.stringify(person) === JSON.stringify(peopleMap()[name])) continue;
+      if (person.semester === undefined) person.semester = `${current.term} ${current.year}`;
+    }
+    return data;
+  }
+
+  function scheduleLabel(person, showUnset = false) {
+    const label = person?.semester || (showUnset ? "Semester not set" : "");
+    return label + (semesterIsOlder(person?.semester) ? " · Previous semester" : "");
   }
 
   // Session-only history: never include old schedules in exports or shared codes.
@@ -1458,6 +1502,7 @@
     card.className = "review-class";
     card.dataset.kind = item.kind || "class";
     if (item.review_warning) card.dataset.warning = item.review_warning;
+    if (Number.isFinite(item.recognition_confidence)) card.dataset.confidence = String(item.recognition_confidence);
     const legend = document.createElement("legend");
     legend.textContent = item.review_warning || "Edit busy block — only the day and times are required";
     card.append(legend);
@@ -1504,6 +1549,12 @@
 
   function renderReviewGrid() {
     const cards = [...els.imageReviewClasses.querySelectorAll(".review-class")];
+    const needsCheck = card => Boolean(card.dataset.warning);
+    const unchecked = cards.filter(needsCheck);
+    els.recognitionReviewNotice.hidden = !unchecked.length;
+    els.recognitionReviewSummary.textContent = unchecked.length
+      ? `Note: ${unchecked.length} uncertain detection${unchecked.length === 1 ? "" : "s"}. Please double-check the ⚠ blocks before saving.` : "";
+    cards.forEach(card => { card.querySelector("legend").textContent = "Edit busy block — only the day and times are required"; });
     const valid = cards.filter(card => /^\d{2}:\d{2}$/.test(reviewValue(card, "start")) && /^\d{2}:\d{2}$/.test(reviewValue(card, "end")) && toMinutes(reviewValue(card, "end")) > toMinutes(reviewValue(card, "start")));
     const first = Math.min(480, ...valid.map(card => Math.floor(toMinutes(reviewValue(card, "start")) / 60) * 60));
     const last = Math.max(1200, ...valid.map(card => Math.ceil(toMinutes(reviewValue(card, "end")) / 60) * 60));
@@ -1554,9 +1605,9 @@
         block.className = "review-grid-block";
         block.style.top = `${start - first}px`;
         block.style.height = `${end - start}px`;
-        block.textContent = `${card.dataset.warning ? "⚠ " : ""}${clock(start)}–${clock(end)} ${reviewValue(card, "course") || "Busy block"}`;
+        block.textContent = `${clock(start)}–${clock(end)} ${needsCheck(card) ? "⚠ " : ""}${reviewValue(card, "course") || "Busy block"}`;
         block.title = `${day} ${block.textContent}. ${card.dataset.warning || "Select to edit."}`;
-        block.setAttribute("aria-label", block.title);
+        block.setAttribute("aria-label", `${needsCheck(card) ? "Uncertain detection. " : ""}${block.title}`);
         block.addEventListener("click", () => { selectReviewCard(card); revealSection(card, card.querySelector('[data-field="course"]')); });
         track.append(block);
         occupiedUntil = Math.max(occupiedUntil ?? end, end);
@@ -1570,6 +1621,7 @@
     if (state.isParsing || state.pendingImage) return;
     state.pendingImage = { name, person, editingName: name || null };
     els.imageReviewName.value = name;
+    setReviewSemester(person.semester, !name);
     els.imageReviewClasses.replaceChildren();
     els.imageReviewPreview.closest("details").hidden = true;
     person.classes.forEach(addReviewClass);
@@ -1606,6 +1658,7 @@
       els.imageReviewPreview.src = state.imagePreviewUrl;
       els.imageReviewPreview.closest("details").hidden = false;
       els.imageReviewName.value = result.name || "";
+      setReviewSemester(result.person.semester, true);
       els.imageReviewClasses.replaceChildren();
       result.person.classes.forEach(addReviewClass);
       selectReviewCard(els.imageReviewClasses.querySelector(".review-class"));
@@ -1629,16 +1682,23 @@
     els.imageReviewError.textContent = "";
     const name = els.imageReviewName.value.trim();
     if (!name) { els.imageReviewError.textContent = "Enter the person's name before saving."; els.imageReviewName.focus(); return; }
+    const term = els.imageReviewSemester.value;
+    const year = els.imageReviewYear.value;
+    if (term && !/^20\d{2}$/.test(year)) { els.imageReviewError.textContent = "Enter a semester year from 2000 to 2099."; els.imageReviewYear.focus(); return; }
+    const semester = term ? `${term} ${year}` : null;
     const classes = [...els.imageReviewClasses.querySelectorAll(".review-class")].map(card => ({ ...Object.fromEntries(
       [...card.querySelectorAll("[data-field]")].map(input => [input.dataset.field, input.value.trim() || null])
-    ), kind: card.dataset.kind || "class" }));
+    ), kind: card.dataset.kind || "class", ...(card.dataset.warning ? {
+      review_warning: card.dataset.warning,
+      ...(card.dataset.confidence ? { recognition_confidence: Number(card.dataset.confidence) } : {}),
+    } : {}) }));
     // An empty manual schedule represents someone with no busy times.
     const workingData = state.hasData ? JSON.parse(JSON.stringify(state.data)) : { schema_version: 1, people: {} };
     const editingName = state.pendingImage.editingName;
     const renamed = editingName && editingName !== name;
     const replacement = Object.prototype.hasOwnProperty.call(workingData.people, name);
     // Define an own property safely even if a person's name is __proto__.
-    Object.defineProperty(workingData.people, name, { value: { source_file: state.pendingImage.person.source_file, classes }, writable: true, enumerable: true, configurable: true });
+    Object.defineProperty(workingData.people, name, { value: { ...state.pendingImage.person, source_file: state.pendingImage.person.source_file, semester, classes }, writable: true, enumerable: true, configurable: true });
     try { validateData(workingData); }
     catch (error) { els.imageReviewError.textContent = error.message; return; }
     if (replacement && !window.confirm(`Replace the existing schedule for ${name} with these reviewed classes?`)) return;
@@ -1806,6 +1866,9 @@
       if (person.classes !== undefined && !Array.isArray(person.classes)) {
         throw new Error(`The classes for ${name} are not in the expected format.`);
       }
+      if (person.semester != null && (typeof person.semester !== "string" || !/^(Winter|Fall) 20\d{2}$/.test(person.semester))) {
+        throw new Error(`The semester for ${name} must be Winter or Fall followed by a year from 2000 to 2099.`);
+      }
       for (const classItem of person.classes || []) {
         if (!classItem || typeof classItem !== "object") {
           throw new Error(`A class for ${name} is not valid.`);
@@ -1919,7 +1982,7 @@
         const parsed = await parsePdfWithNameFallback(file);
         if (Object.prototype.hasOwnProperty.call(workingData.people, parsed.name)) updated += 1;
         else added += 1;
-        workingData.people[parsed.name] = parsed.person;
+        workingData.people[parsed.name] = applyAutomaticSemester({ people: { person: parsed.person } }).people.person;
       } catch (error) {
         failures.push(`${file.name}: ${error.message}`);
       }
@@ -2097,6 +2160,7 @@
     try {
       const imported = await window.WhosFreeShareCode.decode(els.importCodeInput.value);
       validateData(imported);
+      applyAutomaticSemester(imported);
       const result = window.WhosFreeShareCode.merge(state.hasData ? state.data : null, imported);
       validateData(result.data);
       let warning = null;
@@ -2125,6 +2189,7 @@
       const text = await file.text();
       const imported = JSON.parse(text);
       validateData(imported);
+      applyAutomaticSemester(imported, true);
 
       const existingPeople = hadData ? (state.data.people || {}) : {};
       const importedPeople = imported.people || {};
@@ -2286,7 +2351,11 @@
       const person = peopleMap()[name] || {};
       const identity = displayName(name) !== name ? `${name} · ` : "";
       detail.textContent = `${identity}${Array.isArray(person.classes) ? person.classes.length : 0} class meetings${person.source_file ? ` · ${person.source_file}` : ""}`;
+      const label = document.createElement("div");
+      label.className = `schedule-semester${semesterIsOlder(person.semester) ? " semester-older" : ""}`;
+      label.textContent = scheduleLabel(person, true);
       copy.append(title, detail);
+      copy.append(label);
 
       const removeButton = document.createElement("button");
       removeButton.type = "button";
@@ -2415,7 +2484,7 @@
 
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `person-card${selected ? " selected" : ""}${pinned ? " pinned" : ""}`;
+    button.className = `person-card${semesterIsOlder(peopleMap()[name].semester) ? " semester-expired" : ""}${selected ? " selected" : ""}${pinned ? " pinned" : ""}`;
     button.setAttribute("role", "listitem");
     button.setAttribute("aria-pressed", String(selected));
 
@@ -2450,6 +2519,12 @@
     }
 
     copy.append(personName, detail);
+    if (peopleMap()[name].semester) {
+      const label = document.createElement("span");
+      label.className = `schedule-semester${semesterIsOlder(peopleMap()[name].semester) ? " semester-older" : ""}`;
+      label.textContent = scheduleLabel(peopleMap()[name]);
+      copy.append(label);
+    }
     if (busy) {
       const times = document.createElement("span");
       times.className = "person-availability";
@@ -2606,6 +2681,9 @@
     header.className = "detail-header";
     const nameEl = document.createElement("h2");
     nameEl.textContent = displayName(name);
+    const semesterLabel = document.createElement("p");
+    semesterLabel.className = `schedule-semester${semesterIsOlder(peopleMap()[name].semester) ? " semester-older" : ""}`;
+    semesterLabel.textContent = scheduleLabel(peopleMap()[name], true);
     const statusRow = document.createElement("div");
     statusRow.className = "detail-status-row";
 
@@ -2622,6 +2700,7 @@
     }
 
     header.append(nameEl, statusRow);
+    header.append(semesterLabel);
     els.detailPanel.append(header, timelineCard(name, day, minute));
 
     if (current) {
@@ -2805,6 +2884,7 @@
       revealSection(card, card.querySelector('[data-field="course"]'));
     });
     els.saveImageScheduleButton.addEventListener("click", saveImageSchedule);
+    els.imageReviewSemester.addEventListener("change", () => { els.imageReviewYear.disabled = !els.imageReviewSemester.value; });
     els.cancelImageScheduleButton.addEventListener("click", () => { clearImageReview(); setImageStatus("Schedule editing canceled. Nothing was saved.", ""); });
     els.importSchedulesButton.addEventListener("click", chooseScheduleFile);
     els.shareSchedulesButton.addEventListener("click", shareSchedules);
@@ -2888,7 +2968,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=22", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=23", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
