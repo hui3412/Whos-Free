@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=37">
+  <link rel="stylesheet" href="styles.css?v=38">
 </head>
 <body>
   <div class="app-shell">
@@ -190,9 +190,17 @@
         </div>
         <div id="codeImportPanel" class="share-code-panel" hidden>
           <h4>Import a friend’s schedules</h4>
-          <p>Paste the full code, including its special characters. Older codes need a fresh export. Matching names are skipped only when more than 50% of their combined weekly class time overlaps. Different schedules import as Name 2, Name 3, and so on. You can edit names below; existing schedules stay as they are.</p>
+          <p>Paste the full code, including its special characters. New names import automatically. Identical names and timetables are skipped. For the same name with a different timetable, choose Keep both, Replace or Keep old one.</p>
           <label class="field-group share-code-field"><span>Code from your friend</span><textarea id="importCodeInput" rows="5" maxlength="1800000" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></label>
           <div id="importCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
+          <div id="codeConflictPrompt" class="share-code-panel" role="group" aria-labelledby="codeConflictMessage" hidden>
+            <p id="codeConflictMessage" role="alert"></p>
+            <div class="modal-actions">
+              <button class="secondary-button" type="button" data-code-conflict-action="both">Keep both</button>
+              <button class="primary-button" type="button" data-code-conflict-action="replace">Replace</button>
+              <button class="secondary-button" type="button" data-code-conflict-action="old">Keep old one</button>
+            </div>
+          </div>
           <div class="modal-actions">
             <button id="decodeCodeButton" class="primary-button" type="button">Import schedules</button>
             <button id="closeImportButton" class="secondary-button" type="button">Done</button>
@@ -363,11 +371,11 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=37" defer></script>
-  <script src="schedule-image-parser.js?v=37" defer></script>
-  <script src="schedule-availability.js?v=37" defer></script>
-  <script src="schedule-share-code.js?v=37" defer></script>
-  <script src="schedule-groups.js?v=37" defer></script>
-  <script src="app.js?v=37" defer></script>
+  <script src="schedule-parser.js?v=38" defer></script>
+  <script src="schedule-image-parser.js?v=38" defer></script>
+  <script src="schedule-availability.js?v=38" defer></script>
+  <script src="schedule-share-code.js?v=38" defer></script>
+  <script src="schedule-groups.js?v=38" defer></script>
+  <script src="app.js?v=38" defer></script>
 </body>
 </html>

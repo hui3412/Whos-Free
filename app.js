@@ -19,6 +19,7 @@
     isParsing: false,
     pendingImage: null,
     duplicatePicture: null,
+    codeConflict: null,
     codeMode: null,
     imagePreviewUrl: null,
     notificationsEnabled: false,
@@ -112,6 +113,8 @@
     importCodeInput: document.getElementById("importCodeInput"),
     decodeCodeButton: document.getElementById("decodeCodeButton"),
     importCodeStatus: document.getElementById("importCodeStatus"),
+    codeConflictPrompt: document.getElementById("codeConflictPrompt"),
+    codeConflictMessage: document.getElementById("codeConflictMessage"),
     closeImportButton: document.getElementById("closeImportButton"),
 
     peopleManagerCount: document.getElementById("peopleManagerCount"),
@@ -2416,6 +2419,23 @@
     }
   }
 
+  function resolveCodeConflict(conflict) {
+    return new Promise(resolve => {
+      state.codeConflict = { resolve };
+      els.codeConflictMessage.textContent = `A different schedule for ${conflict.existingName} already exists. Keep both as ${conflict.newName}, replace the old schedule, or keep the old one?`;
+      els.codeConflictPrompt.hidden = false;
+      revealSection(els.codeConflictPrompt, els.codeConflictPrompt.querySelector('[data-code-conflict-action="old"]'));
+    });
+  }
+
+  function finishCodeConflict(choice) {
+    if (!state.codeConflict) return;
+    const { resolve } = state.codeConflict;
+    state.codeConflict = null;
+    els.codeConflictPrompt.hidden = true;
+    resolve(choice);
+  }
+
   async function importShareCode() {
     if (state.isParsing || state.codeMode !== "import") return;
     if (!els.importCodeInput.value.trim()) { codeStatus(els.importCodeStatus, "Paste a code to import.", "error"); els.importCodeInput.focus(); return; }
@@ -2426,20 +2446,21 @@
       const imported = await window.WhosFreeShareCode.decode(els.importCodeInput.value);
       validateData(imported);
       applyAutomaticSemester(imported);
-      const result = window.WhosFreeShareCode.merge(state.hasData ? state.data : null, imported);
+      const result = await window.WhosFreeShareCode.merge(state.hasData ? state.data : null, imported, resolveCodeConflict);
       validateData(result.data);
       let warning = null;
-      if (result.added) {
+      if (result.added || result.replaced) {
         const before = captureScheduleChange();
         state.data = result.data;
         warning = await persistCurrentDatabase("Local schedule collection");
-        rememberScheduleChange(before, `Imported ${result.added} schedule${result.added === 1 ? "" : "s"} from a code`);
+        rememberScheduleChange(before, `Imported ${result.added} and replaced ${result.replaced || 0} schedules from a code`);
       }
       const renameNote = result.renamed.length ? ` Imported different schedules as ${result.renamed.map(item => item.to).join(", ")}. You can edit their names in the people list.` : "";
-      codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} matching schedules.${renameNote}`, warning ? "error" : "success");
+      const choicesNote = result.replaced || result.kept ? ` Replaced ${result.replaced || 0}. Kept ${result.kept || 0} old schedules.` : "";
+      codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} identical schedules.${choicesNote}${renameNote}`, warning ? "error" : "success");
     } catch (error) {
       codeStatus(els.importCodeStatus, error.message || "The code could not be imported.", "error");
-    } finally { state.isParsing = false; updateScheduleModal(); }
+    } finally { finishCodeConflict(null); state.isParsing = false; updateScheduleModal(); els.decodeCodeButton.focus({ preventScroll: true }); }
   }
 
   async function handleLocalScheduleFile(event) {
@@ -3194,6 +3215,10 @@
     els.generateCodeButton.addEventListener("click", generateShareCode);
     els.copyCodeButton.addEventListener("click", copyShareCode);
     els.decodeCodeButton.addEventListener("click", importShareCode);
+    els.codeConflictPrompt.addEventListener("click", event => {
+      const button = event.target.closest("[data-code-conflict-action]");
+      if (button) finishCodeConflict(button.dataset.codeConflictAction);
+    });
     els.closeExportButton.addEventListener("click", closeCodePanels);
     els.closeImportButton.addEventListener("click", closeCodePanels);
     els.removeSchedulesButton.addEventListener("click", removeSchedules);
@@ -3219,6 +3244,7 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
       if (event.key !== "Escape") return;
+      if (state.codeConflict) { event.preventDefault(); finishCodeConflict("old"); return; }
       if (state.pendingPersonHold) {
         window.clearTimeout(state.pendingPersonHold.timer); state.pendingPersonHold = null;
       }
@@ -3269,7 +3295,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=37", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=38", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

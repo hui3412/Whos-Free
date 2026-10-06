@@ -17,7 +17,7 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 - **Groups:** Overlapping memberships, live free counts, shared-break suggestions and weekly availability.
 - **Saved ordering:** Independent person orders for each list, pinned people first, and **Send group to top**.
 - **Undo:** Reverse schedule and order changes during the current page session.
-- **Sharing:** PDF/JSON imports, JSON backups, self-contained share codes and duplicate handling.
+- **Sharing:** PDF/JSON imports, JSON backups and self-contained codes with exact duplicate checks and a choice for conflicting schedules.
 - **Semester labels:** Identify older timetables and update their term without changing classes.
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
@@ -42,7 +42,7 @@ Use an upright picture cropped around the full timetable, retaining borders, tim
 October 2–5, 2026, before the visual overhaul
 
 - Added selected-schedule sharing and pasted-code import, then shortened codes with compact times, compression and dense Unicode encoding.
-- Compared same-name imports by weekly busy-time overlap: **more than 50%** skips a duplicate; otherwise a numbered name keeps the distinct schedule.
+- Initially compared same-name imports by weekly busy-time overlap; Version 12.3 replaces this rule with exact checks and explicit conflict choices.
 - Added overlapping groups, live free counts, shared-break suggestions and weekly availability.
 - Added an **8:15 AM–8:05 PM** group grid, weekend columns when needed, darker blocks for more free people and exact names/times on selection.
 - Smoothed short group-grid transitions without changing the original intervals used for shared-break suggestions.
@@ -66,6 +66,8 @@ October 5, 2026, from the visual overhaul onward
 - Showed only older semesters on main cards, greyed them out and added **Use current semester** without changing class times.
 - Added compact recognition warnings that survive saving, reopening and Undo.
 - Added **Replace**, **Keep both** and **Cancel** for same-name picture uploads, ignoring case and repeated spaces.
+- Changed code imports to automatically add different names and skip only identical names and timetables; other same-name schedules offer **Keep both**, **Replace** or **Keep old one**.
+- Made code-import choices apply separately to each conflict, with one Undo for the completed batch and no save until all choices are finished.
 - Added mouse dragging, touch hold-and-drag and **Alt + Up/Down** person reordering, with independent saved orders for the main list, each group and Ungrouped.
 - Preserved hidden people and positions across filters, reloads and renames; kept pinned people above unpinned people while allowing moves within either section.
 - Removed drag grips and kept ordinary phone swipes from starting accidental reorders.
@@ -76,6 +78,8 @@ October 5, 2026, from the visual overhaul onward
 - Updated app caches while retaining OCR assets and added warnings when reordered positions cannot be saved.
 
 Semester defaults use fixed approximate windows: Winter **December 23–May 31**, Fall **June 1–December 22**; labels can be changed or cleared. JSON and new share codes preserve semester labels; semester-aware codes require an updated app. JSON also retains OCR warnings, but share codes omit review markers. Groups, person orders and Undo history remain local and are not exported.
+
+Code-import names are matched without case or repeated spaces. Exact timetable checks compare class days, times, course details and semester labels, ignoring class order, source files and local OCR warnings. **Keep both** adds the next unused numbered name, such as David 2; **Replace** retains the original name and local preferences; **Keep old one** leaves that schedule unchanged. Escape selects **Keep old one** for the current conflict.
 
 ### Improvement checklist
 
@@ -147,8 +151,10 @@ Semester defaults use fixed approximate windows: Winter **December 23–May 31**
 - Excluded canceled, invalid and unchanged operations from Undo history.
 - Added selected-schedule export and pasted-code import.
 - Shortened share codes with compact times, compression and dense Unicode encoding.
-- Compared same-name shared schedules by weekly busy-time overlap rather than course wording.
-- Skipped same-name imports with more than 50% overlap and numbered distinct schedules.
+- Replaced the old share-code overlap rule with exact name-and-timetable duplicate checks.
+- Added Keep both, Replace and Keep old one for differing same-name code imports.
+- Made Keep both use the next unused numbered name without overwriting other imported names.
+- Saved code-import batches only after every conflict choice and made replacements undoable.
 - Reported renamed imported schedules so their names can be corrected.
 - Added Replace, Keep both and Cancel for same-name picture uploads.
 - Made picture-name matching ignore letter case and repeated spaces.

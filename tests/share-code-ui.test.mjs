@@ -17,12 +17,20 @@ async function app(data) {
   const wait = async () => { for (let i = 0; i < 50; i++) { await new Promise(resolve => setTimeout(resolve, 20)); if (!window.document.getElementById("decodeCodeButton").disabled) return; } throw Error("operation did not finish"); };
   await wait();
   const el = id => window.document.getElementById(id);
-  return { window, el, wait, copied: () => copied, stored: () => JSON.parse(window.localStorage.getItem("whos-free-local-schedules") || "null") };
+  const prompt = async () => {
+    for (let i = 0; i < 50; i++) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      if (!el("codeConflictPrompt").hidden) return;
+    }
+    throw Error("conflict prompt did not open");
+  };
+  const choose = action => el("codeConflictPrompt").querySelector(`[data-code-conflict-action="${action}"]`).click();
+  return { window, el, wait, prompt, choose, copied: () => copied, stored: () => JSON.parse(window.localStorage.getItem("whos-free-local-schedules") || "null") };
 }
 
 test("Export includes only chosen people; Import adds new people and leaves duplicates and errors untouched", async () => {
   const person = label => ({ classes: [{ day: "Monday", start: "09:00", end: "10:00", course: label }] });
-  const sender = await app({ schema_version: 1, people: { Alice: person("New Alice course"), Bob: person("Bob course"), Unselected: person("Must not send") } });
+  const sender = await app({ schema_version: 1, people: { Alice: person("Keep existing Alice"), Bob: person("Bob course"), Unselected: person("Must not send") } });
   const receiver = await app({ schema_version: 1, people: { Alice: person("Keep existing Alice") } });
   try {
     sender.el("exportSchedulesButton").click();
@@ -88,25 +96,83 @@ test("a device with no schedules can import a code", async () => {
   } finally { await receiver.window.happyDOM.abort(); }
 });
 
-test("a different same-name schedule imports with an editable name and skips on reimport", async () => {
-  const person = day => ({ classes: [{ day, start: "09:00", end: "10:00", course: "Course" }] });
+for (const choice of ["both", "replace", "old"]) test(`same-name code import offers ${choice}, saves atomically and can be undone`, async () => {
+  const person = (day, course = "Course") => ({ classes: [{ day, start: "09:00", end: "10:00", course }] });
+  const receiver = await app({ people: { David: person("Monday") } });
+  try {
+    const before = receiver.stored();
+    const code = await receiver.window.WhosFreeShareCode.encode({ people: { New: person("Friday"), David: person("Monday", "Changed course") } });
+    receiver.el("importCodeButton").click(); receiver.el("importCodeInput").value = code;
+    receiver.el("decodeCodeButton").click(); await receiver.prompt();
+    assert.equal(receiver.el("closeImportButton").disabled, true);
+    assert.equal(receiver.el("undoChangesButton").disabled, true);
+    assert.deepEqual(receiver.stored(), before, "nothing is persisted before all choices finish");
+    assert.match(receiver.el("codeConflictMessage").textContent, /David 2/);
+    assert.deepEqual([...receiver.el("codeConflictPrompt").querySelectorAll("button")].map(b => b.textContent), ["Keep both", "Replace", "Keep old one"]);
+    receiver.choose(choice); await receiver.wait();
+    const people = receiver.stored().data.people;
+    assert.ok(people.New);
+    assert.equal(people.David.classes[0].course, choice === "replace" ? "Changed course" : "Course");
+    assert.equal(Boolean(people["David 2"]), choice === "both");
+    assert.equal(receiver.el("codeConflictPrompt").hidden, true);
+    receiver.el("closeImportButton").click();
+    receiver.el("undoChangesButton").click(); await receiver.wait();
+    assert.deepEqual(receiver.stored().data.people, before.data.people);
+  } finally { await receiver.window.happyDOM.abort(); }
+});
+
+test("a replacement-only import saves under the canonical name and Undo restores it", async () => {
+  const person = course => ({ classes: [{ day: "Monday", start: "09:00", end: "10:00", course }] });
+  const receiver = await app({ people: { David: person("Old") } });
+  try {
+    receiver.el("settingsButton").click();
+    receiver.window.document.querySelector('[aria-label="Pin David to the top"]').click();
+    receiver.el("closeSettingsModal").click();
+    const before = receiver.stored();
+    const preferences = receiver.window.localStorage.getItem("whos-free-people-preferences-v1");
+    receiver.el("importCodeButton").click();
+    receiver.el("importCodeInput").value = await receiver.window.WhosFreeShareCode.encode({ people: { " DAVID ": person("New") } });
+    receiver.el("decodeCodeButton").click(); await receiver.prompt(); receiver.choose("replace"); await receiver.wait();
+    assert.deepEqual(Object.keys(receiver.stored().data.people), ["David"]);
+    assert.equal(receiver.stored().data.people.David.classes[0].course, "New");
+    assert.equal(receiver.window.localStorage.getItem("whos-free-people-preferences-v1"), preferences);
+    assert.match(receiver.el("importCodeStatus").textContent, /Imported 0 schedules.*Replaced 1/);
+    receiver.el("closeImportButton").click(); receiver.el("undoChangesButton").click(); await receiver.wait();
+    assert.deepEqual(receiver.stored().data.people, before.data.people);
+  } finally { await receiver.window.happyDOM.abort(); }
+});
+
+test("multiple conflicts ask separately and keeping only old schedules does not write or create Undo", async () => {
+  const person = course => ({ classes: [{ day: "Monday", start: "09:00", end: "10:00", course }] });
+  const receiver = await app({ people: { David: person("Old D"), Bob: person("Old B") } });
+  try {
+    const before = receiver.stored();
+    receiver.el("importCodeButton").click();
+    receiver.el("importCodeInput").value = await receiver.window.WhosFreeShareCode.encode({ people: { David: person("New D"), Bob: person("New B") } });
+    receiver.el("decodeCodeButton").click(); await receiver.prompt();
+    receiver.choose("old"); await receiver.prompt();
+    assert.match(receiver.el("codeConflictMessage").textContent, /Bob/);
+    receiver.window.document.dispatchEvent(new receiver.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await receiver.wait();
+    assert.deepEqual(receiver.stored(), before);
+    receiver.el("closeImportButton").click();
+    assert.equal(receiver.el("undoChangesButton").disabled, true);
+  } finally { await receiver.window.happyDOM.abort(); }
+});
+
+test("reimporting a kept-both schedule still prompts for the original name but its exact numbered name skips", async () => {
+  const person = day => ({ classes: [{ day, start: "09:00", end: "10:00" }] });
   const receiver = await app({ people: { David: person("Monday") } });
   try {
     const code = await receiver.window.WhosFreeShareCode.encode({ people: { David: person("Tuesday") } });
     receiver.el("importCodeButton").click(); receiver.el("importCodeInput").value = code;
+    receiver.el("decodeCodeButton").click(); await receiver.prompt(); receiver.choose("both"); await receiver.wait();
+    receiver.el("decodeCodeButton").click(); await receiver.prompt();
+    assert.match(receiver.el("codeConflictMessage").textContent, /David 3/);
+    receiver.choose("old"); await receiver.wait();
+    receiver.el("importCodeInput").value = await receiver.window.WhosFreeShareCode.encode({ people: { "David 2": receiver.stored().data.people["David 2"] } });
     receiver.el("decodeCodeButton").click(); await receiver.wait();
-    assert.match(receiver.el("importCodeStatus").textContent, /Imported different schedules as David 2/);
-    assert.equal(receiver.stored().data.people["David 2"].classes[0].day, "Tuesday");
-    assert.equal(receiver.stored().data.people.David.classes[0].day, "Monday");
-    receiver.el("decodeCodeButton").click(); await receiver.wait();
-    assert.match(receiver.el("importCodeStatus").textContent, /Imported 0 schedules. Skipped 1/);
-    receiver.el("closeImportButton").click();
-    receiver.window.document.querySelector('[aria-label="Edit David 2"]').click();
-    assert.equal(receiver.el("imageReviewName").value, "David 2");
-    receiver.el("imageReviewName").value = "David Chen";
-    receiver.el("saveImageScheduleButton").click(); await receiver.wait();
-    assert.ok(receiver.stored().data.people["David Chen"]);
-    assert.equal(receiver.stored().data.people["David 2"], undefined);
+    assert.match(receiver.el("importCodeStatus").textContent, /Skipped 1 identical/);
   } finally { await receiver.window.happyDOM.abort(); }
 });
 

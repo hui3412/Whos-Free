@@ -178,68 +178,50 @@
     }
     return { schema_version: 1, people };
   }
-  function busyPeriods(person) {
-    const periods = [];
-    for (const day of DAYS) {
-      const items = (person.classes || []).filter(item => item.day === day)
-        .map(item => [time(item.start), time(item.end)]).sort((a, b) => a[0] - b[0]);
-      for (const [start, end] of items) {
-        const last = periods[periods.length - 1];
-        if (last && last.day === day && start <= last.end) last.end = Math.max(last.end, end);
-        else periods.push({ day, start, end });
-      }
-    }
-    return periods;
-  }
-  function scheduleMatch(a, b) {
-    const left = busyPeriods(a), right = busyPeriods(b);
-    const duration = periods => periods.reduce((sum, item) => sum + item.end - item.start, 0);
-    let overlap = 0;
-    // Busy periods are disjoint and ordered by weekday, then start time.
-    // Walk both lists once instead of comparing every pair of intervals.
-    let i = 0, j = 0;
-    while (i < left.length && j < right.length) {
-      const x = left[i], y = right[j];
-      if (x.day !== y.day) {
-        if (DAYS.indexOf(x.day) < DAYS.indexOf(y.day)) i++;
-        else j++;
-        continue;
-      }
-      overlap += Math.max(0, Math.min(x.end, y.end) - Math.max(x.start, y.start));
-      if (x.end <= y.end) i++;
-      else j++;
-    }
-    const union = duration(left) + duration(right) - overlap;
-    return union ? overlap / union : 1;
+  function sameSchedule(a, b) {
+    const signature = person => JSON.stringify([
+      person.semester ?? null,
+      (person.classes || []).map(item => JSON.stringify([
+        item.day, item.start, item.end, ...FIELDS.map(key => item[key] || null),
+        item.kind === "busy_block" ? "busy_block" : "class"
+      ])).sort()
+    ]);
+    // Class order, source files and local OCR review markers are not timetable content.
+    return signature(a) === signature(b);
   }
   function numberedName(name, number) {
     const suffix = ` ${number}`;
     return `${name.trim().slice(0, 120 - suffix.length).trimEnd()}${suffix}`;
   }
-  function merge(existing, incoming) {
+  async function merge(existing, incoming, resolveConflict) {
     const people = { ...(existing?.people || {}) };
     const names = new Map(Object.keys(people).map(name => [normalizedName(name), name]));
+    const reserved = new Set(Object.keys(incoming.people).map(normalizedName));
     const renamed = [];
-    let added = 0, skipped = 0;
+    let added = 0, replaced = 0, skipped = 0, kept = 0;
     for (const [name, person] of Object.entries(incoming.people)) {
-      const normalized = normalizedName(name);
-      const candidates = Object.keys(people).filter(key => {
-        if (normalizedName(key) === normalized) return true;
-        const suffix = normalizedName(key).match(/ (\d+)$/);
-        return suffix && Number(suffix[1]) >= 2 && normalizedName(key) === normalizedName(numberedName(name, Number(suffix[1])));
-      });
-      if (candidates.some(key => scheduleMatch(people[key], person) > 0.5)) { skipped++; continue; }
+      const normalized = normalizedName(name), existingName = names.get(normalized);
       let target = name;
-      if (names.has(normalized)) {
+      if (existingName !== undefined) {
+        if (sameSchedule(people[existingName], person)) { skipped++; continue; }
         let number = 2;
-        while (names.has(normalizedName(numberedName(name, number)))) number++;
-        target = numberedName(name, number);
+        while (names.has(normalizedName(numberedName(existingName, number))) || reserved.has(normalizedName(numberedName(existingName, number)))) number++;
+        const newName = numberedName(existingName, number);
+        if (typeof resolveConflict !== "function") throw new Error(`Choose how to import the different schedule for ${existingName}.`);
+        const choice = await resolveConflict({ name, existingName, newName, existing: people[existingName], incoming: person });
+        if (choice === "old") { kept++; continue; }
+        if (choice === "replace") {
+          Object.defineProperty(people, existingName, { value: person, enumerable: true, configurable: true, writable: true });
+          replaced++; continue;
+        }
+        if (choice !== "both") throw new Error("Schedule import canceled. Nothing was saved.");
+        target = newName;
         renamed.push({ from: name, to: target });
       }
       Object.defineProperty(people, target, { value: person, enumerable: true, configurable: true, writable: true });
       names.set(normalizedName(target), target); added++;
     }
-    return { data: { ...(existing || {}), schema_version: existing?.schema_version || 1, people }, added, skipped, renamed };
+    return { data: { ...(existing || {}), schema_version: existing?.schema_version || 1, people }, added, replaced, skipped, kept, renamed };
   }
-  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, scheduleMatch } };
+  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, sameSchedule } };
 })();
