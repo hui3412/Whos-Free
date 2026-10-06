@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="styles.css?v=33">
 </head>
 <body>
   <div class="app-shell">
@@ -39,7 +39,7 @@
       </div>
 
       <div class="header-actions">
-        <button id="undoChangesButton" class="secondary-button header-data-button" type="button" disabled title="No recent schedule changes to undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h10a7 7 0 0 1 0 14M3 10l5-5M3 10l5 5" transform="translate(0 -3)"/></svg><span>Undo</span></button>
+        <button id="undoChangesButton" class="secondary-button header-data-button" type="button" disabled title="No recent changes to undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h10a7 7 0 0 1 0 14M3 10l5-5M3 10l5 5" transform="translate(0 -3)"/></svg><span>Undo</span></button>
         <button id="scheduleDataButton" class="secondary-button header-data-button" type="button" title="Manage schedule data"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 11h18"/></svg><span>Schedules</span></button>
         <button id="settingsButton" class="secondary-button header-data-button" type="button" title="Open settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m9 3-1 3-3 1-2 5 2 5 3 1 1 3h6l1-3 3-1 2-5-2-5-3-1-1-3Z"/></svg><span>Settings</span></button>
       </div>
@@ -75,13 +75,12 @@
           </div>
         </div>
 
-        <div id="groupVisibility" class="group-visibility" role="group" aria-label="Visible groups" hidden></div>
         <div class="availability-summary" aria-live="polite">
           <p id="statusLine" class="status-line">Checking this device for schedule data…</p>
           <span id="freeCount" class="count-badge">0 of 0 free</span>
         </div>
 
-        <p id="personOrderHelp" class="visually-hidden">Drag a person's grip to change their order. With a person focused, press Alt and Up or Down arrow to move them. Orders are saved separately for the main list and each group.</p>
+        <p id="personOrderHelp" class="visually-hidden">Drag a person to change their order. On touch screens, hold the card briefly before moving; ordinary scrolling does not reorder it. With a person focused, press Alt and Up or Down arrow to move them. Orders are saved separately for the main list and each group. Undo reverses your last order change.</p>
         <div id="peopleList" class="people-list" role="list" aria-label="People"></div>
       </section>
 
@@ -118,7 +117,7 @@
 
       <div class="schedule-undo-row">
         <button id="undoScheduleChangesButton" class="secondary-button" type="button" disabled aria-describedby="undoChangesStatus">Undo</button>
-        <p id="undoChangesStatus" class="status-line" aria-live="polite">No recent schedule changes. Undo keeps the last 20 saved changes until you reload.</p>
+        <p id="undoChangesStatus" class="status-line" aria-live="polite">No recent changes. Undo keeps the last 20 schedule or order changes until you reload.</p>
       </div>
 
       <section class="schedule-action-section" aria-labelledby="scheduleGroupsTitle">
@@ -364,11 +363,11 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=32" defer></script>
-  <script src="schedule-image-parser.js?v=32" defer></script>
-  <script src="schedule-availability.js?v=32" defer></script>
-  <script src="schedule-share-code.js?v=32" defer></script>
-  <script src="schedule-groups.js?v=32" defer></script>
-  <script src="app.js?v=32" defer></script>
+  <script src="schedule-parser.js?v=33" defer></script>
+  <script src="schedule-image-parser.js?v=33" defer></script>
+  <script src="schedule-availability.js?v=33" defer></script>
+  <script src="schedule-share-code.js?v=33" defer></script>
+  <script src="schedule-groups.js?v=33" defer></script>
+  <script src="app.js?v=33" defer></script>
 </body>
 </html>

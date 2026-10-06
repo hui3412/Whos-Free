@@ -2206,10 +2206,6 @@ input[type="time"],
 .view-icon-button svg, .group-hide svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .view-icon-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--card-selected); }
 .view-mode-button { width: auto; gap: 5px; padding: 0 9px; font-size: 0.8rem; }
-.group-visibility { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 18px; }
-.group-visibility[hidden] { display: none; }
-.group-visibility-choice { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; background: var(--input); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8rem; overflow-wrap: anywhere; cursor: pointer; }
-.group-visibility-choice input { width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--accent); }
 .people-group { margin: 8px 0 18px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
 .people-group-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 2px 2px 6px; }
 .people-group-header > div:first-child { min-width: 0; }
@@ -2248,7 +2244,6 @@ input[type="time"],
 .group-exact-period + .group-exact-period { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
 @media (max-width: 560px) {
   .people-heading-row { gap: 8px; }
-  .group-visibility { padding-left: 12px; padding-right: 12px; }
   .people-actions .count-badge { font-size: 0.72rem; padding: 0 7px; }
   .group-manager-row { align-items: flex-start; flex-direction: column; }
   .people-group { padding: 8px; }
@@ -2382,8 +2377,6 @@ button:disabled { cursor: not-allowed; }
 .detail-headline { font-weight: 500; }
 .timeline-class { font-weight: 500; }
 .timeline-marker-label { font-weight: 500; }
-.group-visibility { padding: 8px 0; gap: 6px 16px; }
-.group-visibility-choice { padding: 6px 0; background: transparent; border: 0; border-radius: 0; }
 .people-group { padding: 0; margin: 16px 0 24px; border: 0; border-radius: 0; background: transparent; }
 .people-group-header { padding: 0 0 6px; }
 .people-group-header small { font-size: .8rem; }
@@ -2465,7 +2458,6 @@ button:disabled { cursor: not-allowed; }
   .status-badge { font-size: .75rem; }
   .detail-header { padding-left: 0; padding-right: 0; }
   .detail-card { margin-left: 0; margin-right: 0; }
-  .group-visibility { padding-left: 0; padding-right: 0; }
   .people-group { padding: 0; }
   .modal-backdrop { padding: 8px; }
   .schedule-modal, .settings-modal { padding: 18px; border-radius: 10px; }
@@ -2492,31 +2484,36 @@ button:disabled { cursor: not-allowed; }
 
 .review-semester-fields:has(#useCurrentSemesterButton:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; }
 
-/* The grip is separate from the card's tap-to-open area and preserves its grid. */
-.person-card { position: relative; padding-left: 38px; }
-.person-drag-grip {
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 44px;
-  color: var(--subtle);
-  font-size: 22px;
-  cursor: grab;
-  touch-action: none;
+/* Touch scrolling stays native; a stationary hold arms card reordering. */
+.person-card {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-.person-drag-grip:hover { color: var(--text); }
 .person-dragging { opacity: .55; }
-.person-dragging .person-drag-grip { cursor: grabbing; }
+.person-dragging { cursor: grabbing; }
 .person-card.reorder-before { box-shadow: 0 -3px 0 var(--accent); }
 .person-card.reorder-after { box-shadow: 0 3px 0 var(--accent); }
+.people-group-actions .group-hide { width: auto; min-width: 54px; min-height: 38px; padding: 0 10px; font-size: .82rem; }
+.group-options { position: relative; }
+.group-options .group-more { display: flex; align-items: center; justify-content: center; min-height: 38px; cursor: pointer; list-style: none; }
+.group-options .group-more::-webkit-details-marker { display: none; }
+.group-options-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 10;
+  display: grid;
+  gap: 4px;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 7px;
+  background: var(--card);
+  box-shadow: 0 8px 24px rgba(0,0,0,.2);
+}
+.group-options:not([open]) .group-options-panel { display: none; }
+.group-options-panel button { text-align: left; font-size: .82rem; }
+.people-group.group-collapsed { margin-bottom: 16px; }
 @media (max-width: 600px) {
   .review-semester-fields:has(#useCurrentSemesterButton:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   #useCurrentSemesterButton { grid-column: 1 / -1; }

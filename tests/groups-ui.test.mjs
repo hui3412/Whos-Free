@@ -69,7 +69,7 @@ test("multiple groups keep pins, individual visibility and a flat-list toggle wi
     assert.deepEqual(prefs().groups[0].members, ["Bob", "Alice"]);
     el("showGroupsToggle").click();
     assert.deepEqual(cards(), ["Bob", "Cara"]);
-    const show = window.document.querySelector('[aria-label="Show Lunch"]'); show.checked = true; show.dispatchEvent(new window.Event("change"));
+    window.document.querySelector('[aria-label="Show group Lunch"]').click();
     assert.deepEqual(cards(), ["Bob", "Alice", "Bob", "Cara"]);
     el("viewToggleButton").click();
     assert.deepEqual(cards(), ["Cara"]);
@@ -97,7 +97,7 @@ test("weekly group grid shows exact people, school hours, weekend entries and da
     assert.match(el("groupSlotDetails").textContent, /Busy: Nobody/);
     window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
     assert.equal(el("groupWeekModal").hidden, true);
-    assert.equal(window.document.activeElement.getAttribute("aria-label"), "View weekly availability for Lunch");
+    assert.equal(window.document.activeElement.getAttribute("aria-label"), "Options for group Lunch");
   } finally { await window.happyDOM.abort(); }
 });
 
@@ -106,8 +106,8 @@ test("group edits, saved visibility, empty groups and deleted people do not eras
   const a = await app(saved); const { window, el, prefs, tick, manage, finish } = a;
   try {
     assert.deepEqual(prefs().groups[0].members, ["Alice", "Bob"]);
-    assert.equal(el("groupVisibility").querySelector('[aria-label="Show Club"]').checked, false);
-    assert.equal(el("groupVisibility").querySelector('[aria-label="Show Ungrouped people"]').checked, false);
+    assert.ok(window.document.querySelector('[aria-label="Show group Club"]'));
+    assert.ok(window.document.querySelector('[aria-label="Show group Ungrouped people"]'));
     window.document.querySelector('[aria-label="View weekly availability for Lunch"]').click();
     el("closeGroupWeekModal").click(); manage();
     window.document.querySelector('[aria-label="Edit group Lunch"]').click(); el("groupNameInput").value = "New lunch";
@@ -152,13 +152,13 @@ test("main view toggles are compact neighbors and group management is inside Sch
       assert.ok(el(id).getAttribute("aria-label"));
     }
     assert.ok(el("scheduleModal").contains(el("manageGroupsButton")));
-    assert.ok(el("peopleList").parentElement.contains(el("groupVisibility")));
+    assert.equal(el("groupVisibility"), null);
     assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle"));
     assert.equal(el("viewToggleButton").querySelector("[data-mode-label]").textContent, "Free");
     manage(); create("Lunch", ["Alice", "Bob"]); finish();
-    assert.equal(el("groupVisibility").hidden, false);
+    assert.ok(el("peopleList").querySelector(".people-group"));
     el("showGroupsToggle").click();
-    assert.equal(el("groupVisibility").hidden, true);
+    assert.equal(el("peopleList").querySelector(".people-group"), null);
     assert.equal(el("groupWeekModal").querySelector("#editGroupFromWeekButton"), null);
     el("showGroupsToggle").click(); assert.equal(el("showGroupsToggle").title, "Hide groups");
     assert.ok(el("showGroupsToggle").querySelector("svg"), "toggling must keep the icon");
@@ -166,6 +166,47 @@ test("main view toggles are compact neighbors and group management is inside Sch
     assert.equal(el("viewToggleButton").querySelector("[data-mode-label]").textContent, "All");
     manage(); finish();
   } finally { await window.happyDOM.abort(); }
+});
+
+test("collapsed headers keep counts and options; send-to-top persists and Undo changes only group order", async () => {
+  const saved = { showGroups: true, groups: [
+    { id: "one", name: "Lunch", members: ["Alice", "Bob"] },
+    { id: "two", name: "Club", members: ["Bob", "Cara"] },
+    { id: "three", name: "Study", members: ["Alice", "Cara"] }
+  ] };
+  const a = await app(saved); let b;
+  const headers = owner => [...owner.el("peopleList").querySelectorAll(".people-group h3")].map(item => item.textContent);
+  try {
+    assert.equal(a.el("groupVisibility"), null);
+    const schedules = a.window.localStorage.getItem("whos-free-local-schedules");
+    a.window.document.querySelector('[aria-label="Hide group Club"]').click();
+    const club = () => a.el("peopleList").querySelector('[data-group-id="two"]');
+    assert.deepEqual(headers(a), ["Lunch", "Club", "Study"]);
+    assert.equal(club().querySelector(".person-card"), null);
+    assert.equal(club().querySelector("small").textContent, "1 of 2 free");
+    assert.equal(club().querySelector(".group-hide").textContent, "Show");
+    assert.equal(club().querySelector(".group-hide").getAttribute("aria-expanded"), "false");
+    assert.ok(club().querySelector(".group-more"));
+    assert.notEqual(club().getAttribute("draggable"), "true");
+    a.window.document.querySelector('[aria-label="Send group Club to top"]').click();
+    assert.deepEqual(headers(a), ["Club", "Lunch", "Study"]);
+    assert.equal(club().querySelector(".person-card"), null);
+    assert.deepEqual(a.prefs().groups.map(group => group.id), ["two", "one", "three"]);
+    a.window.document.querySelector('[aria-label="View weekly availability for Club"]').click();
+    assert.equal(a.el("groupWeekModal").hidden, false);
+    a.el("closeGroupWeekModal").click();
+    a.el("undoChangesButton").click(); await a.tick();
+    assert.deepEqual(headers(a), ["Lunch", "Club", "Study"]);
+    assert.equal(club().querySelector(".person-card"), null, "Undo must preserve collapse state");
+    assert.equal(a.window.localStorage.getItem("whos-free-local-schedules"), schedules);
+    a.window.document.querySelector('[aria-label="Send group Club to top"]').click();
+    b = await app(a.prefs());
+    assert.deepEqual(headers(b), ["Club", "Lunch", "Study"]);
+    assert.ok(b.window.document.querySelector('[aria-label="Show group Club"]'));
+    b.window.document.querySelector('[aria-label="Show group Club"]').click();
+    assert.equal(b.el("peopleList").querySelector('[data-group-id="two"]').querySelectorAll(".person-card").length, 2);
+    assert.equal(b.window.document.querySelector('[aria-label="Send group Club to top"]').disabled, true);
+  } finally { await a.window.happyDOM.abort(); await b?.window.happyDOM.abort(); }
 });
 
 test("a merged ten-minute overlap is filled by the five-free neighbor, with exact details preserved", async () => {

@@ -35,9 +35,18 @@ async function app(orders = null, data = fixture) {
     const e = new window.Event(type, { bubbles: true, cancelable: true });
     for (const [name, value] of Object.entries(props)) Object.defineProperty(e, name, { value });
     target.dispatchEvent(e);
+    return e;
   };
+  const holdTimers = new Map();
+  const originalTimeout = window.setTimeout.bind(window), originalClear = window.clearTimeout.bind(window);
+  window.setTimeout = (callback, delay, ...args) => {
+    if (delay !== 450) return originalTimeout(callback, delay, ...args);
+    const id = `hold-${holdTimers.size}`; holdTimers.set(id, callback); return id;
+  };
+  window.clearTimeout = id => { if (holdTimers.has(id)) holdTimers.delete(id); else originalClear(id); };
+  const hold = () => { for (const [id, callback] of holdTimers) { holdTimers.delete(id); callback(); } };
   const read = () => JSON.parse(window.localStorage.getItem(key));
-  return { window, el, cards, names, card, move, event, read, tick };
+  return { window, el, cards, names, card, move, event, read, tick, hold };
 }
 
 test("filtered moves preserve hidden people, All/Free order and reloaded positions", async () => {
@@ -98,23 +107,71 @@ test("native drag supports before/after placement and rejects cross-group drops"
   } finally { await a.window.happyDOM.abort(); }
 });
 
-test("touch grip reorders without opening details; cancellation and keyboard boundaries are safe", async () => {
+test("touch hold reorders without grips or opening details; cancellation and keyboard boundaries are safe", async () => {
   const a = await app();
   try {
-    let source = a.card("Person 4"), grip = source.querySelector(".person-drag-grip");
+    let source = a.card("Person 4");
+    assert.equal(a.el("peopleList").querySelector(".person-drag-grip"), null);
     a.window.document.elementFromPoint = () => a.card("Person 2");
-    a.event(grip, "pointerdown", { button: 0, pointerId: 7 });
-    a.event(grip, "pointermove", { pointerId: 7, clientX: 10, clientY: -1 });
-    a.event(grip, "pointerup", { pointerId: 7 });
+    a.event(source, "touchstart", { touches: [{ identifier: 7, clientX: 10, clientY: 20 }] });
+    assert.equal(source.classList.contains("person-dragging"), false);
+    a.hold();
+    assert.equal(source.classList.contains("person-dragging"), true);
+    a.event(source, "touchmove", { touches: [{ identifier: 7, clientX: 10, clientY: -1 }] });
+    a.event(source, "touchend", { touches: [] });
     assert.deepEqual(a.names(), ["Person 1", "Person 4", "Person 2"]);
     assert.match(a.el("detailPanel").textContent, /Select someone/);
-    source = a.card("Person 2"); grip = source.querySelector(".person-drag-grip");
+    source = a.card("Person 2");
     const before = a.read();
-    a.event(grip, "pointerdown", { button: 0, pointerId: 8 });
-    a.event(grip, "pointercancel", { pointerId: 8 });
+    a.event(source, "touchstart", { touches: [{ identifier: 8, clientX: 10, clientY: 20 }] });
+    a.hold();
+    a.event(source, "touchcancel", { touches: [] });
     assert.deepEqual(a.read(), before);
     a.move("Person 1", "up");
     assert.deepEqual(a.read(), before);
+  } finally { await a.window.happyDOM.abort(); }
+});
+
+test("scrolling or a short tap cancels the hold without intercepting movement or creating Undo", async () => {
+  const a = await app();
+  try {
+    const source = a.card("Person 4");
+    a.event(source, "touchstart", { touches: [{ identifier: 1, clientX: 20, clientY: 20 }] });
+    const move = a.event(source, "touchmove", { touches: [{ identifier: 1, clientX: 20, clientY: 50 }] });
+    a.hold();
+    assert.equal(move.defaultPrevented, false);
+    assert.equal(source.classList.contains("person-dragging"), false);
+    assert.equal(a.read(), null);
+    assert.equal(a.el("undoChangesButton").disabled, true);
+    a.event(source, "touchend", { touches: [] });
+    a.event(source, "touchstart", { touches: [{ identifier: 2, clientX: 20, clientY: 20 }] });
+    a.event(source, "touchend", { touches: [] });
+    a.hold();
+    assert.equal(source.classList.contains("person-dragging"), false);
+    source.click();
+    assert.match(a.el("detailPanel").textContent, /Person 4/);
+  } finally { await a.window.happyDOM.abort(); }
+});
+
+test("Undo reverses person moves in each scope without changing schedules or another list", async () => {
+  const a = await app();
+  try {
+    const schedules = a.window.localStorage.getItem("whos-free-local-schedules");
+    a.move("Person 4", "up");
+    const main = a.read().main;
+    assert.equal(a.el("undoChangesButton").disabled, false);
+    a.el("showGroupsToggle").click();
+    a.move("Person 2", "up", "group:a");
+    assert.deepEqual(a.names("group:a"), ["Person 2", "Person 1", "Person 4"]);
+    a.el("undoChangesButton").click(); await a.tick();
+    assert.deepEqual(a.names("group:a"), ["Person 1", "Person 2", "Person 4"]);
+    assert.deepEqual(a.read().main, main);
+    assert.equal(a.window.localStorage.getItem("whos-free-local-schedules"), schedules);
+    a.el("undoChangesButton").click(); await a.tick();
+    a.el("showGroupsToggle").click();
+    assert.deepEqual(a.names(), ["Person 1", "Person 2", "Person 4"]);
+    assert.equal(a.read().main, undefined);
+    assert.equal(a.el("undoChangesButton").disabled, true);
   } finally { await a.window.happyDOM.abort(); }
 });
 
@@ -156,5 +213,26 @@ test("deleting and undoing a person preserves their saved place", async () => {
     a.el("undoChangesButton").click(); await a.tick();
     assert.deepEqual(a.names(), ["Person 4", "Person 1", "Person 2"]);
     assert.deepEqual(a.read(), saved);
+  } finally { await a.window.happyDOM.abort(); }
+});
+
+test("schedule and person-order changes share chronological Undo; no-op drops add no history", async () => {
+  const a = await app();
+  try {
+    const source = a.card("Person 4");
+    a.event(source, "dragstart"); a.event(a.card("Person 2"), "drop", { clientY: 1 });
+    assert.equal(a.el("undoChangesButton").disabled, true);
+    assert.equal(a.read(), null);
+    a.window.document.querySelector('[aria-label="Edit Person 4"]').click();
+    a.el("imageReviewName").value = "Renamed";
+    a.el("saveImageScheduleButton").click(); await a.tick();
+    a.move("Renamed", "up");
+    assert.match(a.el("undoChangesStatus").textContent, /2 changes available/);
+    a.el("undoChangesButton").click(); await a.tick();
+    assert.deepEqual(a.names(), ["Person 1", "Person 2", "Renamed"]);
+    assert.ok(JSON.parse(a.window.localStorage.getItem("whos-free-local-schedules")).data.people.Renamed);
+    a.el("undoChangesButton").click(); await a.tick();
+    assert.deepEqual(a.names(), ["Person 1", "Person 2", "Person 4"]);
+    assert.equal(a.el("undoChangesButton").disabled, true);
   } finally { await a.window.happyDOM.abort(); }
 });

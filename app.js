@@ -27,6 +27,7 @@
     pinnedPeople: new Set(),
     personOrders: Object.create(null),
     activeReorder: null,
+    pendingPersonHold: null,
     suppressCardClickUntil: 0,
     groups: [],
     showGroups: false,
@@ -134,7 +135,6 @@
     peopleList: document.getElementById("peopleList"),
     showGroupsToggle: document.getElementById("showGroupsToggle"),
     manageGroupsButton: document.getElementById("manageGroupsButton"),
-    groupVisibility: document.getElementById("groupVisibility"),
     groupsModal: document.getElementById("groupsModal"),
     closeGroupsModal: document.getElementById("closeGroupsModal"),
     newGroupButton: document.getElementById("newGroupButton"),
@@ -827,15 +827,19 @@
 
   function rememberScheduleChange(before, label) {
     if (before.hasData === state.hasData && JSON.stringify(before.data) === JSON.stringify(state.data)) return;
-    state.recentChanges.push({ ...before, label, afterPreferences: scheduleUndoPreferences() });
+    rememberUndoChange({ ...before, label, afterPreferences: scheduleUndoPreferences() });
+  }
+
+  function rememberUndoChange(change) {
+    state.recentChanges.push(change);
     if (state.recentChanges.length > 20) state.recentChanges.shift();
     updateUndoControls();
   }
 
   function updateUndoControls() {
     const change = state.recentChanges.at(-1);
-    const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
-    const label = change ? `Undo: ${change.label}` : "No recent schedule changes to undo";
+    const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode) || Boolean(state.activeReorder);
+    const label = change ? `Undo: ${change.label}` : "No recent changes to undo";
     for (const button of [els.undoChangesButton, els.undoScheduleChangesButton]) {
       button.disabled = busy || !change;
       button.title = label;
@@ -843,7 +847,7 @@
     }
     els.undoChangesStatus.textContent = change
       ? `Last change: ${change.label}. ${state.recentChanges.length} change${state.recentChanges.length === 1 ? "" : "s"} available to undo until you reload.`
-      : "No recent schedule changes. Undo keeps the last 20 saved changes until you reload.";
+      : "No recent changes. Undo keeps the last 20 schedule or order changes until you reload.";
   }
 
   function restoreSchedulePreferences(change) {
@@ -890,12 +894,28 @@
   }
 
   async function undoRecentScheduleChange() {
-    if (state.isParsing || state.pendingImage || state.codeMode || !state.recentChanges.length) return;
+    if (state.isParsing || state.pendingImage || state.codeMode || state.activeReorder || state.pendingPersonHold || !state.recentChanges.length) return;
     const change = state.recentChanges.at(-1);
     state.isParsing = true;
     updateScheduleModal();
     let warning = null;
     try {
+      if (change.kind === "person-order" || change.kind === "group-order") {
+        let persisted;
+        if (change.kind === "person-order") {
+          if (change.previous === null) delete state.personOrders[change.scope];
+          else state.personOrders[change.scope] = [...change.previous];
+          persisted = savePersonOrders();
+        } else {
+          const rank = new Map(change.previous.map((id, index) => [id, index]));
+          state.groups.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+          persisted = saveGroupPreferences();
+        }
+        state.recentChanges.pop();
+        refresh({ preserveScroll: true });
+        showToast(persisted ? `Undid: ${change.label}` : "Order restored for this session, but could not be saved on this device.");
+        return;
+      }
       if (change.hasData) {
         try { await saveLocalScheduleRecord({ data: change.data, meta: change.meta }); }
         catch (error) { warning = error.message; }
@@ -1017,9 +1037,12 @@
     if (name === target || !full.includes(name) || !full.includes(target)) return false;
     const next = full.filter(item => item !== name);
     next.splice(next.indexOf(target) + (after ? 1 : 0), 0, name);
+    if (JSON.stringify(full) === JSON.stringify(next)) return false;
+    const previous = state.personOrders[scope] ? [...state.personOrders[scope]] : null;
     // Store the full list, including people hidden by the Free filter.
     state.personOrders[scope] = next;
     const persisted = savePersonOrders();
+    rememberUndoChange({ kind: "person-order", scope, previous, label: `Reordered ${displayName(name)} in ${scope === "main" ? "the main list" : scope === "ungrouped" ? "Ungrouped people" : state.groups.find(group => `group:${group.id}` === scope)?.name || "a group"}` });
     refresh({ preserveScroll: true });
     if (persisted) showToast(`${displayName(name)}'s position saved on this device.`);
     return true;
@@ -1048,6 +1071,7 @@
     state.activeReorder = null;
     clearReorderMarker();
     drag.card.classList.remove("person-dragging");
+    updateUndoControls();
     state.suppressCardClickUntil = Date.now() + 400;
     if (!cancel && drag.target) movePerson(drag.scope, drag.name, drag.target, drag.after);
   }
@@ -1055,19 +1079,15 @@
   function attachPersonReorder(card, name, scope) {
     card.dataset.person = name;
     card.dataset.orderScope = scope;
-    card.draggable = true;
-    card.title = "Drag to reorder. Keyboard: Alt + Up or Down arrow.";
+    card.draggable = !window.matchMedia("(pointer: coarse)").matches;
+    card.title = "Drag to reorder, or hold then move on touch screens. Keyboard: Alt + Up or Down arrow.";
     card.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
     card.setAttribute("aria-describedby", "personOrderHelp");
-    const grip = document.createElement("span");
-    grip.className = "person-drag-grip";
-    grip.textContent = "⠿";
-    grip.setAttribute("aria-hidden", "true");
-    card.prepend(grip);
     card.addEventListener("dragstart", event => {
       if (state.activeReorder) { event.preventDefault(); return; }
       state.activeReorder = { name, scope, card, target: null };
       card.classList.add("person-dragging");
+      updateUndoControls();
       if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", name); }
     });
     card.addEventListener("dragover", event => {
@@ -1080,29 +1100,54 @@
       event.preventDefault(); markReorderTarget(card, event.clientY); finishPersonReorder();
     });
     card.addEventListener("dragend", () => finishPersonReorder(true));
-    grip.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
-    grip.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || state.activeReorder) return;
-      event.preventDefault(); event.stopPropagation();
-      card.focus({ preventScroll: true });
-      state.activeReorder = { name, scope, card, target: null, pointerId: event.pointerId };
-      card.classList.add("person-dragging");
-      grip.setPointerCapture?.(event.pointerId);
-    });
-    grip.addEventListener("pointermove", event => {
-      if (state.activeReorder?.pointerId !== event.pointerId) return;
-      event.preventDefault();
-      markReorderTarget(document.elementFromPoint(event.clientX, event.clientY)?.closest(".person-card"), event.clientY);
+    const cancelHold = () => {
+      if (state.pendingPersonHold?.card !== card) return;
+      window.clearTimeout(state.pendingPersonHold.timer);
+      state.pendingPersonHold = null;
+    };
+    card.addEventListener("touchstart", event => {
+      cancelHold();
+      if (event.touches.length !== 1) { if (state.activeReorder?.card === card) finishPersonReorder(true); return; }
+      if (state.activeReorder || state.isParsing) return;
+      const touch = event.touches[0];
+      const hold = { card, id: touch.identifier, x: touch.clientX, y: touch.clientY };
+      state.pendingPersonHold = hold;
+      hold.timer = window.setTimeout(() => {
+        if (state.pendingPersonHold !== hold || !card.isConnected) return;
+        state.pendingPersonHold = null;
+        state.activeReorder = { name, scope, card, target: null, touchId: hold.id };
+        card.classList.add("person-dragging");
+        updateUndoControls();
+      }, 450);
+    }, { passive: true });
+    card.addEventListener("touchmove", event => {
+      const hold = state.pendingPersonHold;
+      const drag = state.activeReorder;
+      const touch = Array.from(event.touches).find(item => item.identifier === (drag?.touchId ?? hold?.id));
+      if (!touch) { cancelHold(); return; }
+      if (hold?.card === card) {
+        if (Math.hypot(touch.clientX - hold.x, touch.clientY - hold.y) > 10) cancelHold();
+        return; // Ordinary scrolling never starts a reorder.
+      }
+      if (drag?.card !== card) return;
+      if (event.cancelable) event.preventDefault();
+      markReorderTarget(document.elementFromPoint(touch.clientX, touch.clientY)?.closest(".person-card"), touch.clientY);
       const rect = els.peopleList.getBoundingClientRect();
-      if (event.clientY < rect.top + 40) els.peopleList.scrollTop -= 16;
-      else if (event.clientY > rect.bottom - 40) els.peopleList.scrollTop += 16;
-      if (event.clientY < 50) window.scrollBy?.(0, -16);
-      else if (event.clientY > window.innerHeight - 50) window.scrollBy?.(0, 16);
+      if (touch.clientY < rect.top + 40) els.peopleList.scrollTop -= 16;
+      else if (touch.clientY > rect.bottom - 40) els.peopleList.scrollTop += 16;
+      if (touch.clientY < 50) window.scrollBy?.(0, -16);
+      else if (touch.clientY > window.innerHeight - 50) window.scrollBy?.(0, 16);
+    }, { passive: false });
+    card.addEventListener("touchend", event => {
+      cancelHold();
+      if (state.activeReorder?.card !== card) return;
+      if (event.cancelable) event.preventDefault();
+      finishPersonReorder();
+    }, { passive: false });
+    card.addEventListener("touchcancel", () => { cancelHold(); if (state.activeReorder?.card === card) finishPersonReorder(true); });
+    card.addEventListener("contextmenu", event => {
+      if (state.pendingPersonHold?.card === card || state.activeReorder?.card === card || window.matchMedia("(pointer: coarse)").matches) event.preventDefault();
     });
-    grip.addEventListener("pointerup", event => {
-      if (state.activeReorder?.pointerId === event.pointerId) finishPersonReorder();
-    });
-    for (const type of ["pointercancel", "lostpointercapture"]) grip.addEventListener(type, () => finishPersonReorder(true));
     card.addEventListener("keydown", event => {
       if (event.key === "Escape" && state.activeReorder) { event.preventDefault(); finishPersonReorder(true); return; }
       if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
@@ -1159,7 +1204,8 @@
   function saveGroupPreferences() {
     try {
       localStorage.setItem(GROUP_PREFERENCES_KEY, JSON.stringify({ groups: state.groups, showGroups: state.showGroups, hideUngrouped: state.hideUngrouped }));
-    } catch { showToast("Groups work for this session, but this browser couldn't save them."); }
+      return true;
+    } catch { showToast("Groups work for this session, but this browser couldn't save them."); return false; }
   }
 
   function groupMembers(group) {
@@ -1176,36 +1222,37 @@
   }
 
   function setGroupHidden(group, hidden) {
-    group.hidden = hidden;
+    if (group) group.hidden = hidden;
+    else state.hideUngrouped = hidden;
     saveGroupPreferences();
     refresh({ preserveScroll: true });
-    if (!els.groupsModal.hidden) renderGroupsManager();
+    const section = [...els.peopleList.querySelectorAll(".people-group")].find(item => item.dataset.groupId === (group?.id || "ungrouped"));
+    if (els.groupsModal.hidden) section?.querySelector(".group-hide")?.focus({ preventScroll: true });
+    else {
+      renderGroupsManager();
+      [...els.groupsManagerList.querySelectorAll("button")].find(button => button.getAttribute("aria-label") === `${hidden ? "Show" : "Hide"} group ${group?.name}`)?.focus();
+    }
+  }
+
+  function sendGroupToTop(group) {
+    const index = state.groups.indexOf(group);
+    if (index <= 0) return;
+    const previous = state.groups.map(item => item.id);
+    state.groups.splice(index, 1);
+    state.groups.unshift(group);
+    const persisted = saveGroupPreferences();
+    rememberUndoChange({ kind: "group-order", previous, label: `Sent group ${group.name} to top` });
+    refresh({ preserveScroll: true });
+    const section = [...els.peopleList.querySelectorAll(".people-group")].find(item => item.dataset.groupId === group.id);
+    section?.querySelector(".group-more")?.focus({ preventScroll: true });
+    showToast(persisted ? `${group.name} moved to top.` : "Group moved for this session, but could not be saved on this device.");
   }
 
   function updateGroupToolbar() {
-    const focusLabel = els.groupVisibility.contains(document.activeElement) ? document.activeElement.getAttribute("aria-label") : null;
     els.showGroupsToggle.disabled = !state.hasData;
     const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
     els.manageGroupsButton.disabled = !state.hasData || busy;
     setViewToggle(els.showGroupsToggle, state.showGroups ? "Hide groups" : "Show groups", state.showGroups);
-    els.groupVisibility.hidden = !state.showGroups || !state.hasData || !state.groups.length;
-    els.groupVisibility.replaceChildren();
-    if (els.groupVisibility.hidden) return;
-    const checkbox = (label, checked, onChange) => {
-      const wrapper = document.createElement("label");
-      wrapper.className = "group-visibility-choice";
-      const input = document.createElement("input");
-      input.type = "checkbox"; input.checked = checked; input.disabled = busy;
-      input.setAttribute("aria-label", `Show ${label}`);
-      input.addEventListener("change", () => onChange(input.checked));
-      wrapper.append(input, document.createTextNode(label));
-      els.groupVisibility.append(wrapper);
-    };
-    state.groups.forEach(group => checkbox(group.name, !group.hidden, checked => setGroupHidden(group, !checked)));
-    checkbox("Ungrouped people", !state.hideUngrouped, checked => {
-      state.hideUngrouped = !checked; saveGroupPreferences(); refresh({ preserveScroll: true });
-    });
-    if (focusLabel) [...els.groupVisibility.querySelectorAll("input")].find(input => input.getAttribute("aria-label") === focusLabel)?.focus();
   }
 
   function setViewToggle(button, label, pressed) {
@@ -1226,7 +1273,7 @@
       const copy = document.createElement("div");
       const title = document.createElement("strong"); title.textContent = group.name;
       const members = document.createElement("small");
-      members.textContent = `${groupMembers(group).length} people${group.hidden ? " · Hidden" : ""}`;
+      members.textContent = `${groupMembers(group).length} people${group.hidden ? " · Collapsed" : ""}`;
       copy.append(title, members);
       const actions = document.createElement("div"); actions.className = "group-manager-actions";
       for (const [text, action] of [
@@ -1324,31 +1371,47 @@
 
   function groupSection(title, members, visible, day, minute, group = null) {
     const section = document.createElement("section"); section.className = "people-group"; section.setAttribute("role", "listitem");
-    if (group) section.dataset.groupId = group.id;
+    section.dataset.groupId = group?.id || "ungrouped";
+    const collapsed = group ? group.hidden : state.hideUngrouped;
+    section.classList.toggle("group-collapsed", collapsed);
     const header = document.createElement("div"); header.className = "people-group-header";
     const copy = document.createElement("div");
     const heading = document.createElement("h3"); heading.textContent = title;
     const detail = document.createElement("p");
-    if (group) {
+    const count = document.createElement("small");
+    count.textContent = `${members.filter(name => isFree(name, day, minute)).length} of ${members.length} free`;
+    copy.append(heading, count);
+    if (group && !collapsed) {
       const weekly = window.WhosFreeGroups.week(group, peopleMap());
       detail.textContent = sharedTimeText(weekly, day, minute);
-      const count = document.createElement("small");
-      count.textContent = `${members.filter(name => isFree(name, day, minute)).length} of ${members.length} free`;
-      copy.append(heading, count, detail);
-      const actions = document.createElement("div"); actions.className = "people-group-actions";
-      const hide = document.createElement("button"); hide.type = "button";
-      hide.className = "secondary-button group-hide";
-      hide.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.5 5.2A11 11 0 0 1 21 12a14 14 0 0 1-3.2 4.4M6.2 6.2A14 14 0 0 0 3 12c2.6 4.5 5.6 7 9 7a9 9 0 0 0 4-.9M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
-      hide.title = `Hide group ${group.name}`;
-      hide.setAttribute("aria-label", `Hide group ${group.name}`);
-      hide.addEventListener("click", () => setGroupHidden(group, true));
-      const more = document.createElement("button"); more.type = "button";
-      more.className = "secondary-button group-more"; more.textContent = "…";
-      more.title = "Weekly availability"; more.setAttribute("aria-label", `View weekly availability for ${group.name}`);
-      more.addEventListener("click", () => openGroupWeek(group.id, more));
-      actions.append(hide, more); header.append(copy, actions);
-    } else { copy.append(heading); header.append(copy); }
+      copy.append(detail);
+    }
+    const actions = document.createElement("div"); actions.className = "people-group-actions";
+    const hide = document.createElement("button"); hide.type = "button";
+    hide.className = "secondary-button group-hide";
+    hide.textContent = collapsed ? "Show" : "Hide";
+    hide.title = `${collapsed ? "Show" : "Hide"} group ${title}`;
+    hide.setAttribute("aria-label", hide.title);
+    hide.setAttribute("aria-expanded", String(!collapsed));
+    hide.addEventListener("click", () => setGroupHidden(group, !collapsed));
+    actions.append(hide);
+    if (group) {
+      const menu = document.createElement("details"); menu.className = "group-options";
+      const more = document.createElement("summary"); more.className = "secondary-button group-more"; more.textContent = "…";
+      more.title = `Options for group ${group.name}`; more.setAttribute("aria-label", more.title);
+      const options = document.createElement("div"); options.className = "group-options-panel";
+      const top = document.createElement("button"); top.type = "button"; top.className = "secondary-button";
+      top.textContent = "Send group to top"; top.setAttribute("aria-label", `Send group ${group.name} to top`);
+      top.disabled = state.groups[0]?.id === group.id;
+      top.addEventListener("click", () => { menu.open = false; sendGroupToTop(group); });
+      const week = document.createElement("button"); week.type = "button"; week.className = "secondary-button";
+      week.textContent = "Weekly availability"; week.setAttribute("aria-label", `View weekly availability for ${group.name}`);
+      week.addEventListener("click", () => { menu.open = false; openGroupWeek(group.id, more); });
+      options.append(top, week); menu.append(more, options); actions.append(menu);
+    }
+    header.append(copy, actions);
     section.append(header);
+    if (collapsed) return section;
     const list = document.createElement("div"); list.setAttribute("role", "list"); list.setAttribute("aria-label", `${title} people`);
     const filtered = visible.filter(name => members.includes(name));
     const scope = group ? `group:${group.id}` : "ungrouped";
@@ -1366,14 +1429,14 @@
   function renderGroupedPeople(visible, day, minute) {
     const assigned = new Set(state.groups.flatMap(group => groupMembers(group)));
     const shown = new Set();
-    for (const group of state.groups.filter(item => !item.hidden)) {
+    for (const group of state.groups) {
       const members = groupMembers(group);
-      members.forEach(name => shown.add(name));
+      if (!group.hidden) members.forEach(name => shown.add(name));
       els.peopleList.append(groupSection(group.name, members, visible, day, minute, group));
     }
     const ungrouped = Object.keys(peopleMap()).filter(name => !assigned.has(name));
-    if (!state.hideUngrouped && ungrouped.length) {
-      ungrouped.forEach(name => shown.add(name));
+    if (ungrouped.length) {
+      if (!state.hideUngrouped) ungrouped.forEach(name => shown.add(name));
       els.peopleList.append(groupSection("Ungrouped people", ungrouped, visible, day, minute));
     }
     if (!els.peopleList.children.length) els.peopleList.append(createEmptyList("No groups shown", "Select a group above, or choose Hide groups to see the usual list."));
@@ -2970,7 +3033,7 @@
   }
 
   function refresh({ preserveScroll = false } = {}) {
-    if (state.activeReorder) return;
+    if (state.activeReorder || state.pendingPersonHold) return;
     if (!state.hasData || state.loadError) {
       renderDataSetup();
       return;
@@ -2992,6 +3055,9 @@
     const { free, busy, visible } = visiblePeople(day, minute);
     const peopleCount = Object.keys(peopleMap()).length;
     const oldScroll = els.peopleList.scrollTop;
+    const openMenus = [...els.peopleList.querySelectorAll(".group-options[open]")].map(menu => menu.closest(".people-group").dataset.groupId);
+    const activeMenu = document.activeElement?.closest?.(".group-options");
+    const menuFocusLabel = activeMenu ? document.activeElement.getAttribute("aria-label") : null;
 
     els.peopleHeading.textContent = state.showGroups ? "Groups" : state.showEveryone ? "Everyone" : state.useLiveTime ? "Free now" : "Free";
     setViewToggle(els.viewToggleButton, state.showEveryone ? "Show only free" : "Show everyone", state.showEveryone);
@@ -3025,8 +3091,12 @@
       const shownFree = free.filter(name => grouped.shown.has(name)).length;
       const text = `${shownFree} of ${grouped.shown.size} free`;
       els.freeCount.textContent = text;
-      els.statusLine.textContent = `${state.useLiveTime ? "Live · " : ""}${day} at ${formatTime(state.selectedTime)} · ${grouped.shown.size - shownFree} in class · Shown groups`;
+      els.statusLine.textContent = `${state.useLiveTime ? "Live · " : ""}${day} at ${formatTime(state.selectedTime)} · ${grouped.shown.size - shownFree} in class · Expanded groups`;
     } else visible.forEach(name => els.peopleList.append(renderPersonCard(name, day, minute)));
+    for (const section of els.peopleList.querySelectorAll(".people-group")) {
+      if (openMenus.includes(section.dataset.groupId)) section.querySelector(".group-options").open = true;
+    }
+    if (menuFocusLabel) [...els.peopleList.querySelectorAll(".group-options summary, .group-options button")].find(item => item.getAttribute("aria-label") === menuFocusLabel && !item.disabled)?.focus({ preventScroll: true });
 
     if (state.selectedPerson && !displayed.includes(state.selectedPerson)) {
       state.selectedPerson = null;
@@ -3048,6 +3118,9 @@
   }
 
   function bindEvents() {
+    document.addEventListener("click", event => {
+      for (const menu of els.peopleList.querySelectorAll(".group-options[open]")) if (!menu.contains(event.target)) menu.open = false;
+    });
     els.lightThemeButton.addEventListener("click", () => {
       applyTheme("light");
       if (canAnimate()) window.gsap.fromTo(els.lightThemeButton, { scale: 0.97 }, { scale: 1, duration: 0.2, ease: "back.out(1.7)", clearProps: "transform" });
@@ -3137,6 +3210,12 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
       if (event.key !== "Escape") return;
+      if (state.pendingPersonHold) {
+        window.clearTimeout(state.pendingPersonHold.timer); state.pendingPersonHold = null;
+      }
+      if (state.activeReorder) { event.preventDefault(); finishPersonReorder(true); return; }
+      const openMenu = els.peopleList.querySelector(".group-options[open]");
+      if (openMenu) { event.preventDefault(); openMenu.open = false; openMenu.querySelector("summary").focus(); return; }
       if (state.duplicatePicture) { event.preventDefault(); dismissDuplicatePicture(true); return; }
       if (!els.groupWeekModal.hidden) closeGroupWeek();
       else if (!els.groupsModal.hidden) closeGroupsModal();
@@ -3181,7 +3260,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=32", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=33", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
