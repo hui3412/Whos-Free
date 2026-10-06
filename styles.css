@@ -2155,26 +2155,8 @@ input[type="time"],
   transition-timing-function: ease;
 }
 
-/* iOS Safari gives time inputs a stubborn intrinsic width. On small phones,
-   stack Day and Time and strip that native minimum so the control can never
-   paint outside the schedule panel. */
+/* Strip the native time-input minimum so compact controls fit small phones. */
 @media (max-width: 480px) {
-  .control-bar {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .control-bar .live-control,
-  .control-bar .field-group,
-  .control-bar #refreshButton {
-    grid-column: 1 !important;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .control-bar .field-group {
-    overflow: hidden;
-  }
-
   .control-bar select,
   .control-bar input[type="time"] {
     display: block;
@@ -2291,7 +2273,30 @@ h1, h2, h3, h4, strong { font-weight: 500; }
 .header-data-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 .panel { background: var(--panel); border: 0; border-radius: var(--radius); box-shadow: none; }
 .control-bar, .people-panel, .detail-panel { background: transparent; }
-.control-bar { padding: 0; gap: 16px; margin-bottom: 24px; }
+.control-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  max-width: 400px;
+  padding: 0;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.control-bar .live-control { grid-column: 1; grid-row: 1; }
+.control-bar #refreshButton { grid-column: 2; grid-row: 1; width: auto; }
+.time-selection-row {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+.time-selection-row select, .time-selection-row input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
 .live-control, .field-group { font-weight: 400; }
 .primary-button, .secondary-button, .icon-button, .danger-button,
 .modal-close, .mini-danger-button, .bell-button, .preference-icon-button,

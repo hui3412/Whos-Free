@@ -1376,8 +1376,8 @@
 
   function syncLiveControls() {
     els.liveToggle.checked = state.useLiveTime;
-    els.daySelect.disabled = state.useLiveTime;
-    els.timeInput.disabled = state.useLiveTime;
+    els.daySelect.disabled = false;
+    els.timeInput.disabled = false;
   }
 
   function selectedMoment() {
@@ -2994,17 +2994,17 @@
       refresh();
     });
 
-    els.daySelect.addEventListener("change", () => {
+    const previewSelectedMoment = () => {
+      state.useLiveTime = false;
+      syncLiveControls();
       state.selectedDay = els.daySelect.value;
-      state.selectedPerson = null;
-      refresh();
-    });
-
-    els.timeInput.addEventListener("change", () => {
       state.selectedTime = els.timeInput.value;
       state.selectedPerson = null;
       refresh();
-    });
+    };
+    els.daySelect.addEventListener("change", previewSelectedMoment);
+    els.timeInput.addEventListener("input", previewSelectedMoment);
+    els.timeInput.addEventListener("change", previewSelectedMoment);
 
     els.refreshButton.addEventListener("click", () => {
       refresh();
@@ -3029,7 +3029,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=27", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=28", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
