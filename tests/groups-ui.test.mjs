@@ -53,10 +53,15 @@ test("multiple groups keep pins, individual visibility and a flat-list toggle wi
     assert.equal(el("showGroupsToggle").getAttribute("aria-label"), "Hide groups");
     assert.deepEqual(cards(), ["Bob", "Alice", "Bob", "Cara"]);
     assert.equal(el("freeCount").textContent, "1 of 3 free", "overlapping memberships must not count twice");
+    assert.equal(el("freeCount").parentElement, el("statusLine").parentElement);
+    assert.equal(el("statusLine").nextElementSibling, el("freeCount"));
+    assert.equal(el("freeCount").closest(".people-actions"), null);
+    assert.match(el("statusLine").textContent, /2 in class/);
     assert.match(el("peopleList").textContent, /Next everyone free: 12:05 PM/);
     window.document.querySelector('[aria-label="Hide group Lunch"]').click();
     assert.deepEqual(cards(), ["Bob", "Cara"]);
     assert.equal(el("freeCount").textContent, "1 of 2 free");
+    assert.match(el("statusLine").textContent, /1 in class/);
     el("showGroupsToggle").click();
     assert.equal(el("showGroupsToggle").getAttribute("aria-label"), "Show groups");
     assert.deepEqual(cards(), ["Bob", "Cara", "Alice"]);
