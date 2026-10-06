@@ -25,6 +25,9 @@
     mutedPeople: new Set(),
     nicknames: {},
     pinnedPeople: new Set(),
+    personOrders: Object.create(null),
+    activeReorder: null,
+    suppressCardClickUntil: 0,
     groups: [],
     showGroups: false,
     hideUngrouped: false,
@@ -48,6 +51,7 @@
   const NOTIFICATION_HISTORY_KEY = "whos-free-notification-history-v1";
   const PEOPLE_PREFERENCES_KEY = "whos-free-people-preferences-v1";
   const VIEW_PREFERENCE_KEY = "whos-free-view-mode-v1";
+  const PERSON_ORDER_KEY = "whos-free-person-order-v1";
   const GROUP_PREFERENCES_KEY = "whos-free-groups-v1";
   const ACCENT_THEME_KEY = "whos-free-accent-theme-v1";
   const ACCENT_THEMES = new Set(["blue", "violet", "rose", "mint", "orange"]);
@@ -807,6 +811,7 @@
       pinnedPeople: [...state.pinnedPeople],
       mutedPeople: [...state.mutedPeople],
       groups: state.groups,
+      personOrders: state.personOrders,
     }));
   }
 
@@ -843,6 +848,13 @@
 
   function restoreSchedulePreferences(change) {
     const before = change.preferences, after = change.afterPreferences;
+    for (const scope of new Set([...Object.keys(before.personOrders || {}), ...Object.keys(after.personOrders || {})])) {
+      if (JSON.stringify(before.personOrders?.[scope]) === JSON.stringify(after.personOrders?.[scope])) continue;
+      if (JSON.stringify(state.personOrders[scope]) !== JSON.stringify(after.personOrders?.[scope])) continue;
+      if (before.personOrders?.[scope]) state.personOrders[scope] = [...before.personOrders[scope]];
+      else delete state.personOrders[scope];
+    }
+    savePersonOrders();
     // Reverse only preferences affected by this schedule change. Later changes
     // to themes, pins, nicknames or unrelated group memberships stay intact.
     for (const key of ["pinnedPeople", "mutedPeople"]) {
@@ -958,6 +970,150 @@
   function displayName(name) {
     const nickname = String(state.nicknames[name] || "").trim();
     return nickname || name;
+  }
+
+  function loadPersonOrders() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PERSON_ORDER_KEY) || "null");
+      if (!saved || typeof saved !== "object" || Array.isArray(saved)) return;
+      const allowed = new Set(["main", "ungrouped", ...state.groups.map(group => `group:${group.id}`)]);
+      for (const [scope, names] of Object.entries(saved).filter(([scope]) => allowed.has(scope)).slice(0, 102)) {
+        if (Array.isArray(names)) state.personOrders[scope] = [...new Set(names.filter(name => typeof name === "string").slice(0, 10000))];
+      }
+    } catch { /* Invalid or unavailable storage must not block the app. */ }
+  }
+
+  function savePersonOrders() {
+    const allowed = new Set(["main", "ungrouped", ...state.groups.map(group => `group:${group.id}`)]);
+    for (const scope of Object.keys(state.personOrders)) if (!allowed.has(scope)) delete state.personOrders[scope];
+    try { localStorage.setItem(PERSON_ORDER_KEY, JSON.stringify(state.personOrders)); return true; }
+    catch { showToast("Order changed for this session, but could not be saved on this device."); return false; }
+  }
+
+  function orderedPeople(names, scope) {
+    const saved = state.personOrders[scope];
+    if (!saved) return names;
+    const allowed = new Set(names), seen = new Set();
+    return [...saved, ...names].filter(name => allowed.has(name) && !seen.has(name) && seen.add(name));
+  }
+
+  function orderScopeMembers(scope) {
+    let names = Object.keys(peopleMap());
+    if (scope.startsWith("group:")) names = groupMembers(state.groups.find(group => `group:${group.id}` === scope) || { members: [] });
+    if (scope === "ungrouped") {
+      const assigned = new Set(state.groups.flatMap(group => groupMembers(group)));
+      names = names.filter(name => !assigned.has(name));
+    }
+    // Keep the old pinned/free/busy ordering until a list is explicitly reordered.
+    names.sort(comparePeopleNames);
+    const minute = toMinutes(state.selectedTime), day = state.selectedDay;
+    const pinned = names.filter(name => state.pinnedPeople.has(name));
+    const remaining = names.filter(name => !state.pinnedPeople.has(name));
+    return orderedPeople([...pinned, ...remaining.filter(name => isFree(name, day, minute)), ...remaining.filter(name => !isFree(name, day, minute))], scope);
+  }
+
+  function movePerson(scope, name, target, after = false) {
+    const full = orderScopeMembers(scope);
+    if (name === target || !full.includes(name) || !full.includes(target)) return false;
+    const next = full.filter(item => item !== name);
+    next.splice(next.indexOf(target) + (after ? 1 : 0), 0, name);
+    // Store the full list, including people hidden by the Free filter.
+    state.personOrders[scope] = next;
+    const persisted = savePersonOrders();
+    refresh({ preserveScroll: true });
+    if (persisted) showToast(`${displayName(name)}'s position saved on this device.`);
+    return true;
+  }
+
+  function clearReorderMarker() {
+    els.peopleList.querySelectorAll(".reorder-before, .reorder-after").forEach(card => card.classList.remove("reorder-before", "reorder-after"));
+  }
+
+  function markReorderTarget(card, y) {
+    const drag = state.activeReorder;
+    clearReorderMarker();
+    if (!drag || !card || card.dataset.orderScope !== drag.scope || card.dataset.person === drag.name) {
+      if (drag) drag.target = null;
+      return;
+    }
+    drag.target = card.dataset.person;
+    const rect = card.getBoundingClientRect();
+    drag.after = y >= rect.top + rect.height / 2;
+    card.classList.add(drag.after ? "reorder-after" : "reorder-before");
+  }
+
+  function finishPersonReorder(cancel = false) {
+    const drag = state.activeReorder;
+    if (!drag) return;
+    state.activeReorder = null;
+    clearReorderMarker();
+    drag.card.classList.remove("person-dragging");
+    state.suppressCardClickUntil = Date.now() + 400;
+    if (!cancel && drag.target) movePerson(drag.scope, drag.name, drag.target, drag.after);
+  }
+
+  function attachPersonReorder(card, name, scope) {
+    card.dataset.person = name;
+    card.dataset.orderScope = scope;
+    card.draggable = true;
+    card.title = "Drag to reorder. Keyboard: Alt + Up or Down arrow.";
+    card.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+    card.setAttribute("aria-describedby", "personOrderHelp");
+    const grip = document.createElement("span");
+    grip.className = "person-drag-grip";
+    grip.textContent = "⠿";
+    grip.setAttribute("aria-hidden", "true");
+    card.prepend(grip);
+    card.addEventListener("dragstart", event => {
+      if (state.activeReorder) { event.preventDefault(); return; }
+      state.activeReorder = { name, scope, card, target: null };
+      card.classList.add("person-dragging");
+      if (event.dataTransfer) { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", name); }
+    });
+    card.addEventListener("dragover", event => {
+      if (!state.activeReorder || state.activeReorder.scope !== scope) return;
+      event.preventDefault();
+      markReorderTarget(card, event.clientY);
+    });
+    card.addEventListener("drop", event => {
+      if (!state.activeReorder || state.activeReorder.scope !== scope) return;
+      event.preventDefault(); markReorderTarget(card, event.clientY); finishPersonReorder();
+    });
+    card.addEventListener("dragend", () => finishPersonReorder(true));
+    grip.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
+    grip.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || state.activeReorder) return;
+      event.preventDefault(); event.stopPropagation();
+      card.focus({ preventScroll: true });
+      state.activeReorder = { name, scope, card, target: null, pointerId: event.pointerId };
+      card.classList.add("person-dragging");
+      grip.setPointerCapture?.(event.pointerId);
+    });
+    grip.addEventListener("pointermove", event => {
+      if (state.activeReorder?.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      markReorderTarget(document.elementFromPoint(event.clientX, event.clientY)?.closest(".person-card"), event.clientY);
+      const rect = els.peopleList.getBoundingClientRect();
+      if (event.clientY < rect.top + 40) els.peopleList.scrollTop -= 16;
+      else if (event.clientY > rect.bottom - 40) els.peopleList.scrollTop += 16;
+      if (event.clientY < 50) window.scrollBy?.(0, -16);
+      else if (event.clientY > window.innerHeight - 50) window.scrollBy?.(0, 16);
+    });
+    grip.addEventListener("pointerup", event => {
+      if (state.activeReorder?.pointerId === event.pointerId) finishPersonReorder();
+    });
+    for (const type of ["pointercancel", "lostpointercapture"]) grip.addEventListener(type, () => finishPersonReorder(true));
+    card.addEventListener("keydown", event => {
+      if (event.key === "Escape" && state.activeReorder) { event.preventDefault(); finishPersonReorder(true); return; }
+      if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      const cards = [...card.parentElement.querySelectorAll(".person-card")].filter(item => item.dataset.orderScope === scope);
+      const index = cards.indexOf(card), down = event.key === "ArrowDown";
+      const target = cards[index + (down ? 1 : -1)];
+      if (!target) return;
+      movePerson(scope, name, target.dataset.person, down);
+      [...els.peopleList.querySelectorAll(".person-card")].find(item => item.dataset.person === name && item.dataset.orderScope === scope)?.focus({ preventScroll: true });
+    });
   }
 
   function comparePeopleNames(a, b) {
@@ -1195,7 +1351,9 @@
     section.append(header);
     const list = document.createElement("div"); list.setAttribute("role", "list"); list.setAttribute("aria-label", `${title} people`);
     const filtered = visible.filter(name => members.includes(name));
-    filtered.forEach(name => list.append(renderPersonCard(name, day, minute)));
+    const scope = group ? `group:${group.id}` : "ungrouped";
+    const shown = new Set(filtered);
+    orderScopeMembers(scope).filter(name => shown.has(name)).forEach(name => list.append(renderPersonCard(name, day, minute, scope)));
     if (!filtered.length) {
       const message = document.createElement("p"); message.className = "group-empty";
       message.textContent = members.length ? "Nobody in this group is free at this time. Choose Show everyone to see them." : "No people in this group. Edit it to add members.";
@@ -1390,13 +1548,13 @@
     const freeSet = new Set(free);
     const busy = people.filter(name => !freeSet.has(name)).sort(comparePeopleNames);
 
-    if (!state.showEveryone) return { free, busy, visible: free };
+    if (!state.showEveryone) return { free, busy, visible: orderedPeople(free, "main") };
 
     const pinned = people.filter(name => state.pinnedPeople.has(name));
     const pinnedSet = new Set(pinned);
     const remainingFree = free.filter(name => !pinnedSet.has(name));
     const remainingBusy = busy.filter(name => !pinnedSet.has(name));
-    return { free, busy, visible: [...pinned, ...remainingFree, ...remainingBusy] };
+    return { free, busy, visible: orderedPeople([...pinned, ...remainingFree, ...remainingBusy], "main") };
   }
 
   function showToast(message) {
@@ -1748,6 +1906,8 @@
           delete state.nicknames[editingName];
         }
         for (const group of state.groups) group.members = [...new Set(group.members.map(member => member === editingName ? name : member))];
+        for (const scope of Object.keys(state.personOrders)) state.personOrders[scope] = [...new Set(state.personOrders[scope].map(member => member === editingName ? name : member))];
+        savePersonOrders();
         savePeoplePreferences(); saveGroupPreferences();
       }
       state.selectedPerson = name;
@@ -2518,7 +2678,7 @@
     showToast("Removed local schedule data");
   }
 
-  function renderPersonCard(name, day, minute) {
+  function renderPersonCard(name, day, minute, scope = "main") {
     const busyClass = currentClass(name, day, minute);
     const busy = !isFree(name, day, minute);
     const selected = name === state.selectedPerson;
@@ -2582,7 +2742,9 @@
     badge.style.whiteSpace = "pre-line";
 
     button.append(dot, copy, badge);
+    attachPersonReorder(button, name, scope);
     button.addEventListener("click", () => {
+      if (state.activeReorder || Date.now() < state.suppressCardClickUntil) return;
       state.selectedPerson = name;
       refresh({ preserveScroll: true });
       animateSelectedCard();
@@ -2808,6 +2970,7 @@
   }
 
   function refresh({ preserveScroll = false } = {}) {
+    if (state.activeReorder) return;
     if (!state.hasData || state.loadError) {
       renderDataSetup();
       return;
@@ -3018,7 +3181,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=31", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=32", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
@@ -3036,6 +3199,7 @@
     state.nicknames = { ...savedPeoplePreferences.nicknames };
     state.pinnedPeople = new Set(savedPeoplePreferences.pinnedPeople);
     Object.assign(state, loadGroupPreferences());
+    loadPersonOrders();
     state.accentTheme = loadAccentTheme();
 
     if (!("Notification" in window) || Notification.permission !== "granted") {
