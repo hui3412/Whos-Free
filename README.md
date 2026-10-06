@@ -16,6 +16,8 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 - **Automatic scrolling:** Manual entry, completed picture recognition and saved-schedule editing bring the review grid into view. Selecting or adding a busy block reveals its editor. Import/export panels, generated codes, group forms and selected group-availability details also scroll into view. Focus stays with the newly opened content, and scrolling respects reduced-motion preferences.
 - **Optimizations:** Availability calculations parse class times once, duplicate checks compare sorted busy intervals in one pass, and group calendars partition available and busy people in one traversal. These changes preserve the existing calculation results and duplicate threshold.
 
+- **Group menu clipping fix:** Opening a group's **…** menu reserves space below its header, so both actions remain inside the people panel instead of being clipped by the detail section when all groups are collapsed.
+
 ### Semester labels and recognition warnings
 
 Adds automatic, optional semester labels and compact recognition warnings while retaining the current design and automatic panel scrolling.

@@ -209,6 +209,25 @@ test("collapsed headers keep counts and options; send-to-top persists and Undo c
   } finally { await a.window.happyDOM.abort(); await b?.window.happyDOM.abort(); }
 });
 
+test("open menus reserve header space even when every group is collapsed", async () => {
+  const a = await app({ showGroups: true, groups: [
+    { id: "one", name: "Lunch", members: ["Alice", "Bob"], hidden: true },
+    { id: "two", name: "Club", members: ["Bob", "Cara"], hidden: true }
+  ] });
+  try {
+    assert.equal(a.el("peopleList").querySelectorAll(".person-card").length, 0);
+    const menu = a.el("peopleList").querySelector('[data-group-id="two"] .group-options');
+    menu.open = true;
+    assert.equal(menu.querySelectorAll("button").length, 2);
+    assert.ok(menu.closest(".people-group-header"));
+    const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+    assert.match(css, /\.people-group:has\(\.group-options\[open\]\) \.people-group-header\s*\{\s*padding-bottom:\s*110px;/,
+      "the absolutely positioned menu needs a footprint inside its overflow-clipped ancestors");
+    menu.open = false;
+    assert.equal(a.el("peopleList").querySelector(".group-options[open]"), null);
+  } finally { await a.window.happyDOM.abort(); }
+});
+
 test("a merged ten-minute overlap is filled by the five-free neighbor, with exact details preserved", async () => {
   const names = ["A", "B", "C", "D", "E", "F", "G"];
   const schedules = { schema_version: 1, people: Object.fromEntries(names.map((name, i) => [name, { classes: i < 2 ? [item("08:15","09:35")] : i < 5 ? [item("09:45","11:05")] : [] }])) };
