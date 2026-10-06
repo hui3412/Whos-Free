@@ -386,7 +386,7 @@
       const matches = items.filter(item => dayMatchesLabel(day, item.text));
       if (!matches.length) {
         if (["Saturday", "Sunday"].includes(day)) continue;
-        throw new Error("Could not locate all weekday columns. Make sure this is an English or French Marianopolis Omnivox schedule PDF.");
+        throw new Error("Could not locate all weekday columns. Make sure this is an English or French Omnivox schedule PDF.");
       }
       dayItems[day] = matches.sort((a, b) => a.y0 - b.y0)[0];
     }
@@ -804,7 +804,7 @@
     }
 
     const classes = extractClasses(model);
-    if (!classes.length) throw new Error("No classes were found. Make sure this is the standard Marianopolis Omnivox weekly schedule PDF.");
+    if (!classes.length) throw new Error("No classes were found. Make sure this is the standard Omnivox weekly schedule PDF.");
 
     return {
       name,

@@ -1,6 +1,8 @@
 # Who's Free? — Web App v8
 
-A privacy-first static web app for comparing Marianopolis schedules.
+A privacy-first static web app for comparing Omnivox schedules.
+
+Import compatible Omnivox timetable PDFs or screenshots from your school, or enter schedules manually. PDF recognition depends on the timetable format; always review imported times before saving.
 
 ## Fork updates — last updated October 5, 2026
 
@@ -156,7 +158,7 @@ The **Share schedules.json** button shares/downloads only the schedule database.
 
 ## v9 changes
 
-- The browser PDF parser now recognizes Marianopolis Omnivox schedules in **English or French**.
+- The browser PDF parser now recognizes Omnivox schedules in **English or French**.
   - Weekdays such as `Monday` / `Lundi`, `Tuesday` / `Mardi`, `Wednesday` / `Mercredi`, `Thursday` / `Jeudi`, and `Friday` / `Vendredi` are normalized to the same internal weekday names.
   - Room labels accept English `Classroom` plus French forms such as `Local`, `Classe`, and `Salle de classe`.
   - Section labels accept `sec.`, `sect.`, and `section`.

@@ -767,8 +767,8 @@
   function currentSemester() {
     const date = new Date();
     const month = date.getMonth(), year = date.getFullYear();
-    // Suggest the next term during the end-of-term breaks. Marianopolis's
-    // published 2026–27 calendar ends Fall on Dec 22 and Winter on May 31.
+    // Suggest the next term using fixed approximate end-of-term windows.
+    // Fall ends on Dec 22 and Winter on May 31 in these defaults.
     // Future years use the same approximate windows; labels remain editable.
     if (month === 11 && date.getDate() >= 23) return { term: "Winter", year: year + 1 };
     return { term: month >= 5 ? "Fall" : "Winter", year };
@@ -3269,7 +3269,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=36", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=37", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
