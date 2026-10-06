@@ -60,6 +60,104 @@ Picture OCR runs locally, without an OCR server or AI API. Orders, groups and Un
 
 Deploy the root app files and complete `assets/ocr/` folder over HTTPS or `http://localhost`; opening `index.html` directly may block recognition. OCR files load on first use and can work offline afterward on supported browsers while cached files and storage remain available.
 
+### Improvement checklist
+
+- Replaced outlined containers with cleaner filled backgrounds throughout the app.
+- Kept the existing layout, Settings, themes, notifications and personalization features.
+- Made the main weekday and time controls compact and placed them on the same row.
+- Removed the visible weekday and time field labels.
+- Made the time box the same height as the weekday box, including on iPhone.
+- Allowed weekday and time edits while live mode is active, automatically switching to a manual preview.
+- Made Use current time restore the actual weekday and time and continue updating.
+- Moved Use current time beside the All/Free and Groups controls.
+- Removed the separate Refresh button.
+- Combined the in-class and free/total counts below the view controls.
+- Kept the selected All/Free view after page reloads.
+- Added local timetable-picture import for JPG/JPEG, PNG and WebP.
+- Added on-device English/French OCR without uploading pictures to an OCR server or AI API.
+- Bundled OCR files and cached them for later offline use on supported browsers.
+- Added an editable seven-day timetable review grid.
+- Added manual schedule creation without running OCR.
+- Allowed saved timetables to be reopened and edited.
+- Allowed class blocks to be added, corrected or removed before saving.
+- Made course labels, codes, rooms and instructors optional for manual entries.
+- Kept the saved timetable unchanged when an edit is canceled.
+- Preserved occupied times even when course text is unfamiliar or unreadable.
+- Improved recognition of faint JPEG grid borders and narrow time labels.
+- Preserved numeric and wrapped room labels and wrapped instructor names.
+- Corrected common OCR confusion between I, 1 and | after explicit room labels.
+- Retained athlete and conflict blocks as occupied time.
+- Kept merged course detections as editable busy spans rather than discarding them.
+- Added Saturday and Sunday support to recognition, editing and availability.
+- Showed breaks between classes in the review grid.
+- Merged overlapping busy spans to prevent false breaks.
+- Excluded gaps of 10 minutes or less from free-time breaks.
+- Showed the next real break time on person cards.
+- Added groups with overlapping memberships.
+- Added group free counts and next shared-break suggestions.
+- Added a weekly group-availability grid with darker blocks for more free people.
+- Showed exact free and busy names when selecting a group-availability block.
+- Limited the group grid to 8:15 AM–8:05 PM and included weekends when needed.
+- Smoothed short group-grid transitions while preserving exact intervals for inspection.
+- Removed the group visibility checklist.
+- Made Hide collapse group members without removing the group's header.
+- Kept each collapsed group's name, free count, Show button and three-dot menu visible.
+- Added collapse and expand controls for Ungrouped people.
+- Saved group collapse states across reloads.
+- Added Send group to top without adding group drag-and-drop.
+- Saved group order across reloads.
+- Counted overlapping group members only once in the combined availability status.
+- Fixed three-dot menus being clipped when all groups are collapsed.
+- Added drag-and-drop person reordering on computers.
+- Added hold-and-drag person reordering on touch screens.
+- Removed the six-dot drag grips.
+- Kept ordinary phone swipes and short taps from starting a reorder.
+- Added Alt + Up/Down keyboard reordering.
+- Saved separate person orders for the main list, each group and Ungrouped.
+- Preserved person order across All/Free filters and page reloads.
+- Kept filtered-out people in the saved order when moving visible people.
+- Preserved saved positions when people are renamed.
+- Kept pinned people above unpinned people even in manually reordered lists.
+- Allowed pinned people to be reordered among themselves.
+- Blocked moves across the pinned/unpinned boundary with an explanatory message.
+- Added Undo for schedule saves, edits and renames.
+- Added Undo for PDF batches, JSON imports and share-code imports.
+- Added Undo for removing one person or all local schedules.
+- Added Undo for person reordering and Send group to top.
+- Kept up to 20 Undo entries during the current page session.
+- Restored affected preferences and group memberships when undoing schedule changes.
+- Kept order Undo separate from schedules, other lists and group collapse states.
+- Excluded canceled, invalid and unchanged operations from Undo history.
+- Added selected-schedule export and pasted-code import.
+- Shortened share codes with compact times, compression and dense Unicode encoding.
+- Compared same-name shared schedules by weekly busy-time overlap rather than course wording.
+- Skipped same-name imports with more than 50% overlap and numbered distinct schedules.
+- Reported renamed imported schedules so their names can be corrected.
+- Added Replace, Keep both and Cancel for same-name picture uploads.
+- Made picture-name matching ignore letter case and repeated spaces.
+- Added automatic Fall/Winter semester labels to new schedules.
+- Assigned semester labels to previously unlabeled saved and imported schedules.
+- Allowed semester labels to be changed or cleared in the editor.
+- Showed semester labels on main cards only for older timetables.
+- Greyed out older-semester schedules while keeping their details accessible.
+- Added Use current semester to update an older timetable's label without changing classes.
+- Preserved semester labels through saving, Undo, JSON and new share codes.
+- Added compact warning markers for uncertain picture recognition.
+- Retained recognition warnings after saving, reopening and Undo.
+- Included recognition metadata in JSON while keeping local review markers out of share codes.
+- Automatically revealed newly opened manual editors and completed picture reviews.
+- Automatically revealed saved-schedule editors, block editors, import/export panels and group details.
+- Respected reduced-motion preferences when scrolling to newly opened content.
+- Reorganized Schedules so picture/manual entry and sharing appear before PDF/JSON imports.
+- Optimized availability calculations, duplicate comparisons and group-calendar processing.
+- Updated service-worker caches to deliver app changes while retaining cached OCR assets.
+- Warned when reordered positions could not be saved on the device.
+- Added fork-improvement credit alongside the original creator.
+- Added the Omnivox optimization sentence to the header description.
+- Replaced school-specific wording with school-neutral Omnivox wording.
+- Added a feature summary and shortened the fork's README usage notes.
+- Expanded automated regression coverage for recognition, editing, groups, ordering, Undo and offline caching.
+
 The original version and deployment notes follow below.
 
 ## What's new in v8
