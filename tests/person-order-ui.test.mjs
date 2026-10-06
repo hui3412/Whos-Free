@@ -10,7 +10,7 @@ const fixture = { schema_version: 1, people: {
   "Person 4": { classes: [] }
 } };
 const groups = { groups: ["a", "b"].map(id => ({ id, name: id.toUpperCase(), members: Object.keys(fixture.people) })) };
-async function app(orders = null, data = fixture) {
+async function app(orders = null, data = fixture, pins = []) {
   const window = new Window({ url: "http://localhost/Whos-Free/", settings: { disableJavaScriptFileLoading: true, disableCSSFileLoading: true } });
   window.document.write(fs.readFileSync(new URL("../index.html", import.meta.url), "utf8"));
   window.setInterval = () => 0;
@@ -18,6 +18,7 @@ async function app(orders = null, data = fixture) {
   window.confirm = () => true;
   window.localStorage.setItem("whos-free-local-schedules", JSON.stringify({ data, meta: {} }));
   window.localStorage.setItem("whos-free-groups-v1", JSON.stringify(groups));
+  window.localStorage.setItem("whos-free-people-preferences-v1", JSON.stringify({ pinnedPeople: pins }));
   if (orders !== null) window.localStorage.setItem(key, JSON.stringify(orders));
   for (const file of ["schedule-availability.js", "schedule-groups.js", "app.js"]) window.eval(fs.readFileSync(new URL("../" + file, import.meta.url), "utf8"));
   const tick = () => new Promise(resolve => setTimeout(resolve, 35));
@@ -66,6 +67,57 @@ test("filtered moves preserve hidden people, All/Free order and reloaded positio
     reloaded.event(reloaded.el("timeInput"), "input");
     assert.deepEqual(reloaded.names(), ["Person 1", "Person 4", "Person 2", "Person 3"]);
   } finally { await a.window.happyDOM.abort(); await reloaded?.window.happyDOM.abort(); }
+});
+
+test("pins override saved order and blocked moves do not save or add Undo entries", async () => {
+  const a = await app({ main: ["Person 4", "Person 2", "Person 1", "Person 3"] }, fixture, ["Person 1", "Person 2"]);
+  let reloaded;
+  try {
+    assert.deepEqual(a.names(), ["Person 2", "Person 1", "Person 4"]);
+    const before = a.read();
+    a.move("Person 4", "up");
+    assert.deepEqual(a.names(), ["Person 2", "Person 1", "Person 4"]);
+    assert.deepEqual(a.read(), before);
+    assert.match(a.el("toast").textContent, /Cannot move someone above a pinned person/);
+    assert.equal(a.el("undoChangesButton").disabled, true);
+    a.move("Person 1", "down");
+    assert.deepEqual(a.read(), before);
+    assert.match(a.el("toast").textContent, /Pinned people must stay above unpinned people/);
+    a.move("Person 1", "up");
+    assert.deepEqual(a.names(), ["Person 1", "Person 2", "Person 4"]);
+    reloaded = await app(a.read(), fixture, ["Person 1", "Person 2"]);
+    assert.deepEqual(reloaded.names(), a.names());
+    a.el("undoChangesButton").click(); await a.tick();
+    assert.deepEqual(a.names(), ["Person 2", "Person 1", "Person 4"]);
+    a.el("viewToggleButton").click();
+    assert.deepEqual(a.names(), ["Person 2", "Person 1", "Person 4", "Person 3"]);
+    a.el("showGroupsToggle").click();
+    a.move("Person 4", "up", "group:a");
+    assert.deepEqual(a.names("group:a"), ["Person 1", "Person 2", "Person 4", "Person 3"]);
+    a.move("Person 2", "up", "group:a");
+    assert.deepEqual(a.names("group:a"), ["Person 2", "Person 1", "Person 4", "Person 3"]);
+    assert.deepEqual(a.names("group:b"), ["Person 1", "Person 2", "Person 4", "Person 3"]);
+  } finally { await a.window.happyDOM.abort(); await reloaded?.window.happyDOM.abort(); }
+});
+
+test("new pins immediately rise above manual orders, including busy filtered pins and drag boundaries", async () => {
+  const a = await app({ main: ["Person 4", "Person 2", "Person 1", "Person 3"] });
+  try {
+    a.el("settingsButton").click();
+    a.window.document.querySelector('[aria-label="Pin Person 2 to the top"]').click();
+    a.window.document.querySelector('[aria-label="Pin Person 3 to the top"]').click();
+    a.el("closeSettingsModal").click();
+    assert.deepEqual(a.names(), ["Person 2", "Person 4", "Person 1"]);
+    const before = a.read();
+    a.event(a.card("Person 4"), "dragstart");
+    a.event(a.card("Person 2"), "drop", { clientY: -1 });
+    assert.deepEqual(a.read(), before);
+    assert.match(a.el("toast").textContent, /Cannot move someone above a pinned person/);
+    a.move("Person 1", "up");
+    assert.deepEqual(a.names(), ["Person 2", "Person 1", "Person 4"]);
+    a.el("viewToggleButton").click();
+    assert.deepEqual(a.names(), ["Person 2", "Person 3", "Person 1", "Person 4"]);
+  } finally { await a.window.happyDOM.abort(); }
 });
 
 test("main and overlapping groups have independent persisted orders", async () => {

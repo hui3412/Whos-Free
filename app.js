@@ -1012,9 +1012,10 @@
 
   function orderedPeople(names, scope) {
     const saved = state.personOrders[scope];
-    if (!saved) return names;
     const allowed = new Set(names), seen = new Set();
-    return [...saved, ...names].filter(name => allowed.has(name) && !seen.has(name) && seen.add(name));
+    const ordered = [...(saved || []), ...names].filter(name => allowed.has(name) && !seen.has(name) && seen.add(name));
+    // Pins always win, while preserving manual order within each partition.
+    return [...ordered.filter(name => state.pinnedPeople.has(name)), ...ordered.filter(name => !state.pinnedPeople.has(name))];
   }
 
   function orderScopeMembers(scope) {
@@ -1037,6 +1038,14 @@
     if (name === target || !full.includes(name) || !full.includes(target)) return false;
     const next = full.filter(item => item !== name);
     next.splice(next.indexOf(target) + (after ? 1 : 0), 0, name);
+    let sawUnpinned = false;
+    for (const person of next) {
+      if (!state.pinnedPeople.has(person)) sawUnpinned = true;
+      else if (sawUnpinned) {
+        showToast(state.pinnedPeople.has(name) ? "Pinned people must stay above unpinned people." : "Cannot move someone above a pinned person.");
+        return false;
+      }
+    }
     if (JSON.stringify(full) === JSON.stringify(next)) return false;
     const previous = state.personOrders[scope] ? [...state.personOrders[scope]] : null;
     // Store the full list, including people hidden by the Free filter.
@@ -3260,7 +3269,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=34", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=35", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
