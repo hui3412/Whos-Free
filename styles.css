@@ -783,11 +783,6 @@ input[type="time"]:disabled {
     margin-bottom: 6px;
   }
 
-  .primary-button#refreshButton {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
   .people-heading-row {
     align-items: flex-start;
     padding: 16px 14px 0;
@@ -2274,19 +2269,12 @@ h1, h2, h3, h4, strong { font-weight: 500; }
 .panel { background: var(--panel); border: 0; border-radius: var(--radius); box-shadow: none; }
 .control-bar, .people-panel, .detail-panel { background: transparent; }
 .control-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
+  display: block;
   max-width: 400px;
   padding: 0;
-  gap: 10px;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
-.control-bar .live-control { grid-column: 1; grid-row: 1; }
-.control-bar #refreshButton { grid-column: 2; grid-row: 1; width: auto; }
 .time-selection-row {
-  grid-column: 1 / -1;
-  grid-row: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
@@ -2321,7 +2309,8 @@ button:disabled { cursor: not-allowed; }
 .main-grid { gap: 24px; }
 .people-heading-row { padding: 0; gap: 12px; }
 .people-heading-row h2 { font-size: 1.2rem; font-weight: 500; }
-.people-actions { gap: 8px; }
+.people-actions { gap: 8px; flex-wrap: wrap; }
+.people-actions .live-control { font-size: .82rem; gap: 6px; min-height: 42px; }
 .people-actions .view-icon-button { min-height: 42px; min-width: 42px; }
 .people-actions .view-mode-button { width: auto; padding: 0 11px; }
 .count-badge { min-height: 0; padding: 0; background: transparent; color: var(--muted); font-weight: 400; }
@@ -2447,6 +2436,13 @@ button:disabled { cursor: not-allowed; }
   .people-actions .count-badge { margin-left: auto; }
   .header-data-button { padding-left: 10px; padding-right: 10px; }
   .header-data-button svg { width: 15px; height: 15px; }
+}
+
+@media (max-width: 680px) {
+  .people-heading-row { flex-wrap: wrap; }
+  .people-heading-row h2 { flex-basis: 100%; }
+  .people-actions { width: 100%; margin-left: 0; justify-content: flex-start; }
+  .people-actions .count-badge { margin-left: auto; }
 }
 
 .review-semester-fields:has(#useCurrentSemesterButton:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; }

@@ -123,7 +123,6 @@
     liveToggle: document.getElementById("liveToggle"),
     daySelect: document.getElementById("daySelect"),
     timeInput: document.getElementById("timeInput"),
-    refreshButton: document.getElementById("refreshButton"),
     peopleHeading: document.getElementById("peopleHeading"),
     viewToggleButton: document.getElementById("viewToggleButton"),
     freeCount: document.getElementById("freeCount"),
@@ -344,11 +343,6 @@
       { opacity: 0, y: 4 },
       { opacity: 1, y: 0, duration: 0.22, stagger: 0.035, ease: "power1.out", clearProps: "opacity,transform" }
     );
-  }
-
-  function animateRefreshFeedback() {
-    if (!canAnimate()) return;
-    window.gsap.fromTo(els.refreshButton, { scale: 0.97 }, { scale: 1, duration: 0.18, ease: "back.out(1.6)", clearProps: "transform" });
   }
 
   function loadNotificationSettings() {
@@ -3006,11 +3000,6 @@
     els.timeInput.addEventListener("input", previewSelectedMoment);
     els.timeInput.addEventListener("change", previewSelectedMoment);
 
-    els.refreshButton.addEventListener("click", () => {
-      refresh();
-      animateRefreshFeedback();
-    });
-
     els.viewToggleButton.addEventListener("click", () => {
       state.showEveryone = !state.showEveryone;
       try { localStorage.setItem(VIEW_PREFERENCE_KEY, state.showEveryone ? "all" : "free"); }
@@ -3029,7 +3018,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=28", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=29", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

@@ -23,6 +23,9 @@ test("compact day/time controls preview edits immediately and restore live time"
     assert.equal(el("daySelect").parentElement.className, "time-selection-row");
     assert.equal(el("daySelect").getAttribute("aria-label"), "Day");
     assert.equal(el("timeInput").getAttribute("aria-label"), "Time");
+    assert.equal(el("refreshButton"), null);
+    assert.equal(el("liveToggle").closest("label").nextElementSibling, el("viewToggleButton"));
+    assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle"));
     const originalDay = el("daySelect").value;
     el("timeInput").value = "08:30";
     el("timeInput").dispatchEvent(new window.Event("input"));
@@ -31,9 +34,8 @@ test("compact day/time controls preview edits immediately and restore live time"
     el("daySelect").value = "Monday";
     change("daySelect");
     assert.equal(el("freeCount").textContent, "0 of 1 free");
-    el("refreshButton").click();
     liveTick();
-    assert.equal(el("timeInput").value, "08:30", "manual selection survives refresh and live ticks");
+    assert.equal(el("timeInput").value, "08:30", "manual selection survives live ticks");
     el("liveToggle").checked = true;
     change("liveToggle");
     const now = new Date();
