@@ -2275,15 +2275,47 @@ h1, h2, h3, h4, strong { font-weight: 500; }
   margin-bottom: 12px;
 }
 .time-selection-row {
+  --time-control-height: 38px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
+  align-items: center;
 }
 .time-selection-row select, .time-selection-row input {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   max-width: 100%;
+  height: var(--time-control-height);
+  min-height: var(--time-control-height);
+  max-height: var(--time-control-height);
+  padding: 0 11px;
+  margin: 0;
+  line-height: normal;
+}
+/* Safari's native time value has its own box; center it inside the shared height. */
+.time-selection-row input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: center;
+}
+.time-selection-row input[type="time"]::-webkit-date-and-time-value {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+.time-selection-row input[type="time"]::-webkit-datetime-edit {
+  padding: 0;
+}
+@media (max-width: 560px) {
+  .time-selection-row { --time-control-height: 44px; }
+  .time-selection-row select, .time-selection-row input { font-size: 16px; }
 }
 .live-control, .field-group { font-weight: 400; }
 .primary-button, .secondary-button, .icon-button, .danger-button,
