@@ -8,6 +8,7 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 ### Appearance, navigation and performance
 
+- **Header description:** The existing introduction continues with “Optimized for the Omnivox system.” in the same paragraph.
 - **Clean styling:** Subtle filled backgrounds replace outlined containers across the main page, Schedules, Settings and groups. The existing layout and features remain, including notifications, nicknames, pins, mute controls and all five light/dark color themes.
 - **Compact time controls:** The weekday selector and time input sit side by side without visible field labels. **Use current time** sits immediately left of the All/Free and Groups buttons; the separate Refresh button is removed. Both fields stay editable: changing either automatically switches to a manual preview. Checking **Use current time** again immediately restores today's weekday and current time, then continues updating automatically.
 - **Combined availability summary:** The free/total count appears beside the in-class count below the view controls, with spacing between them. Group mode counts people in expanded groups, without counting overlapping memberships twice. Each collapsed group's header keeps its own live free/total count.
