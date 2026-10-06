@@ -8,77 +8,57 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 ### Summary
 
-- **Cleaner visual design:** A simpler, mobile-friendly interface with subtle filled backgrounds, compact controls and the original app's features preserved.
-- **Schedule image recognition:** Import timetable screenshots with on-device English/French OCR, then review detected classes and recognition warnings before saving.
-- **Manual timetable editing:** Build schedules from scratch or edit imported and saved schedules in a seven-day grid; add, correct or remove class blocks.
-- **Availability and real breaks:** See who's free now or preview another day and time, including weekends. Gaps of 10 minutes or less count as passing time rather than free time.
-- **Groups and shared availability:** Create overlapping groups, see their free counts and next shared breaks, and explore weekly availability. Collapse groups without losing their headers or counts.
-- **Saved ordering and pins:** Reorder people independently in the main list and each group, with positions retained across filters and reloads. Pinned people stay above unpinned people. Reorder groups with **Send group to top**.
-- **Undo:** Reverse schedule additions, edits, imports, removals and order changes, with up to 20 changes retained during the current page session.
-- **Import, sharing and duplicate handling:** Import PDF/JSON schedules, export JSON backups, share selected schedules through self-contained codes, and choose **Replace**, **Keep both** or **Cancel** for same-name picture uploads.
-- **Semester labels:** Label schedules by term, distinguish older timetables and quickly update their semester without changing class times.
+- **Cleaner design:** Subtle filled backgrounds, compact mobile controls and automatic scrolling to newly opened panels.
+- **Image recognition:** On-device English/French OCR for timetable screenshots, with warnings for uncertain detections.
+- **Timetable editor:** Create schedules manually or correct imported and saved schedules in a seven-day grid.
+- **Availability:** Check now or preview another time, including weekends, with real breaks and next-class details.
+- **Groups:** Overlapping memberships, live free counts, shared-break suggestions and weekly availability.
+- **Saved ordering:** Independent person orders for each list, pinned people first, and **Send group to top**.
+- **Undo:** Reverse schedule and order changes during the current page session.
+- **Sharing:** PDF/JSON imports, JSON backups, self-contained share codes and duplicate handling.
+- **Semester labels:** Identify older timetables and update their term without changing classes.
 
-### Appearance, navigation and performance
+### Import and edit schedules
 
-- **Header description:** The existing introduction continues with “Optimized for the Omnivox system.” in the same paragraph.
-- **Clean styling:** Subtle filled backgrounds replace outlined containers across the main page, Schedules, Settings and groups. The existing layout and features remain, including notifications, nicknames, pins, mute controls and all five light/dark color themes.
-- **Compact time controls:** The weekday selector and time input sit side by side without visible field labels. **Use current time** sits immediately left of the All/Free and Groups buttons; the separate Refresh button is removed. Both fields stay editable: changing either automatically switches to a manual preview. Checking **Use current time** again immediately restores today's weekday and current time, then continues updating automatically.
-- **Combined availability summary:** The free/total count appears beside the in-class count below the view controls, with spacing between them. Group mode counts people in expanded groups, without counting overlapping memberships twice. Each collapsed group's header keeps its own live free/total count.
-- **Matching mobile fields:** Weekday and time controls share an explicit height (44 pixels on phones, 38 on larger screens), with the native Safari time value centered vertically.
-- **Saved person order:** Drag a person's card with a mouse, hold it for about half a second before moving on touch screens, or focus it and press **Alt + Up/Down**. There are no drag grips; ordinary swipes and short taps do not arm reordering. The main list, each group and the Ungrouped section save independent orders on this device. All/Free filtering and reloads keep those orders; moving a visible person places them relative to the chosen target without discarding hidden people. Newly added names appear after the saved order. Pinned people always stay above unpinned people, including in saved orders. Reorder freely within either section; moving an unpinned person above a pinned person, or a pinned person below an unpinned person, is blocked with an explanation. Manual ordering still takes priority over automatic free/name sorting within each section. Lists not manually reordered retain the original sorting. Renaming preserves positions. **Undo** reverses order moves as well as schedule changes, without changing another list. Orders are local preferences, not part of exports or share codes. If storage is unavailable, reordering still works for the session and displays a warning.
-- **Automatic scrolling:** Manual entry, completed picture recognition and saved-schedule editing bring the review grid into view. Selecting or adding a busy block reveals its editor. Import/export panels, generated codes, group forms and selected group-availability details also scroll into view. Focus stays with the newly opened content, and scrolling respects reduced-motion preferences.
-- **Optimizations:** Availability calculations parse class times once, duplicate checks compare sorted busy intervals in one pass, and group calendars partition available and busy people in one traversal. These changes preserve the existing calculation results and duplicate threshold.
+Import JPG/JPEG, PNG or WebP pictures, or choose **Enter schedule manually**. Select grid blocks to edit their text, day or times; add missing classes or remove incorrect blocks. Course names, codes, rooms and instructors are optional. Reopen saved timetables with **Edit**.
 
-- **Group menu clipping fix:** Opening a group's **…** menu reserves space below its header, so both actions remain inside the people panel instead of being clipped by the detail section when all groups are collapsed.
+Crop pictures around the full, upright timetable, keeping grid borders, times and day headings. Review detected times before saving, especially blocks marked **⚠**. Recognition can make mistakes. For image-only PDFs, use the picture importer.
 
-### Semester labels and recognition warnings
+Same-name picture uploads offer **Replace**, **Keep both** or **Cancel**. Matching ignores case and repeated spaces. Replace keeps existing preferences; Keep both adds a numbered name.
 
-Adds automatic, optional semester labels and compact recognition warnings while retaining the current design and automatic panel scrolling.
+### Availability and groups
 
-- **Semester labels:** New manual, picture, PDF, JSON and shared-code schedules receive an automatic Fall or Winter label, such as **Fall 2026** or **Winter 2027**. In the schedule editor, change the term/year or choose **Not set** before saving. Legacy schedules missing a semester are assigned the current semester when loaded or imported. The first assigned label is saved so it remains attached across future term changes. Explicitly cleared labels (**Not set**) stay unset. Only previous-semester labels appear on main-page cards. All labels remain visible in the schedule manager and person details. In an older schedule’s editor, **Use current semester** fills the current term and year; **Save schedule** applies the change without altering its classes. Earlier semesters appear greyed out in the people list and show **Previous semester**; their schedules remain accessible and availability calculations stay unchanged.
-- **Term timing:** Suggestions switch to the next semester during the end-of-term break: Winter from December 23 through May 31, and Fall from June 1 through December 22. These defaults follow the end-of-term deadlines in the [Marianopolis 2026–27 academic calendar](https://www.marianopolis.edu/wp-content/uploads/2026/03/academic_calendar_2026-2027.pdf). The app uses those same approximate windows each year, offline; it does not fetch changing school calendars. The label can be overridden or cleared in the editor.
-- **Saving and sharing:** Labels persist on the device, through Undo, and in JSON exports/imports and new share codes. Existing unlabeled share codes still work. A code containing semester labels requires this updated app or a later compatible version. The existing duplicate schedule rule is unchanged; importing a duplicate does not relabel the saved schedule.
-- **Recognition uncertainty:** Picture recognition retains word confidence and flags a block if its length-weighted mean is below 70, or a word of at least three characters scores below 45. Missing confidence, unreadable text and multiple detected course codes also prompt review. These scores are OCR signals, not calibrated probabilities that a timetable is correct. Occupied times and break detection remain unchanged.
-- **Reviewing flags:** A small **⚠** appears immediately before the course name in each uncertain grid block. A short note immediately above **Save schedule** gives the number of uncertain detections and asks the user to double-check the flagged blocks. There are no jump buttons or review checkboxes. Flags remain available after saving and reopening, and Undo restores their previous state. Recognition metadata is preserved in local data and JSON exports; share codes carry schedules and semester labels, not the local review markers.
+Editing the weekday or time switches to a manual preview. **Use current time** restores live updates; **All/Free** remembers your selection after reloads. Gaps of **10 minutes or less** count as passing time, not breaks. Availability depends on occupied times, including athlete/conflict blocks, not course wording.
 
-### Duplicate picture uploads
+Manage groups in **Schedules → Manage groups**. People can belong to several groups. **Hide/Show** collapses members while retaining the name, free count and **…** menu. The combined status counts people in expanded groups once, even with overlapping memberships.
 
-When saving a picture schedule with an existing name, choose **Replace**, **Keep both**, or **Cancel**. Matching ignores letter case and repeated spaces. Replace retains the existing name and its preferences; Keep both adds the next available numbered name. Cancel keeps the review open without saving. Each saved choice can be undone, and both JSON and share-code exports include the resulting schedules and semester labels.
+The **…** menu offers **Send group to top** and **Weekly availability**. Group order and collapse states persist locally. The weekly grid covers **8:15 AM–8:05 PM**, adds weekend columns when needed, and uses darker blocks for more free people. Select a block for exact times and names. Short transitions are merged for display; shared-break suggestions use the original times.
 
+### Reordering and Undo
 
-### Undo recent changes
+Drag cards with a mouse, hold briefly before dragging on phones, or use **Alt + Up/Down** on a focused card. Ordinary swipes still scroll. The main list, each group and Ungrouped save separate orders across filters and reloads, without losing hidden people. Pinned people always stay first; reorder within the pinned or unpinned section. Groups use **Send group to top**, not dragging.
 
-**Undo** in the main header or **Schedules** reverses the last schedule or order change. It covers picture/manual saves, edits and renames, PDF batches, JSON and share-code imports, removing a person, removing all local schedules, person reordering and sending a group to the top. Each import or completed move is one change; no-op drops and canceled drags are not recorded. Order undo restores only that list's order, not schedules, other lists or group collapse states. Schedule undo restores affected nicknames, pins, notification mutes and group memberships without reversing unrelated preference changes.
+**Undo** reverses saves, edits, renames, imports, removals and order changes. It retains **20 changes per page session**; reloading clears history, not saved data. Finish or cancel an editor or code panel before undoing. Order Undo affects only that order; schedule Undo restores affected preferences and memberships without reversing unrelated changes.
 
-The last **20 changes** are available for the current page session only; reloading clears the undo history, not the schedules. Canceled edits, invalid imports and imports that don't change schedules aren't recorded. Finish or cancel an open editor or code panel before undoing. Undo saves the restored schedules on this device, with a warning if browser storage is unavailable. History is never included in exports or share codes.
+### Semester labels
 
-### Schedule import, sharing and groups
+New and previously unlabeled schedules receive an automatic Fall/Winter label. Change it in the editor or choose **Not set**. Only older semesters appear on main-page cards, greyed out; all labels remain visible in schedule details. **Use current semester**, then **Save schedule**, updates an older label without altering classes.
 
-This fork adds on-device schedule picture recognition and an editable weekly grid.
+Defaults use Winter from December 23–May 31 and Fall from June 1–December 22. These are fixed, approximate yearly windows, not a live school-calendar lookup. Labels persist locally, through Undo, and in JSON and new share codes.
 
-- **Picture import:** JPG/JPEG, PNG and WebP screenshots are read locally with English/French OCR. Pictures and recognized schedule data are not sent to an OCR server or AI API.
-- **Editable grid:** Detection fills a seven-day timetable. Select a busy block to correct its wording, day or times, add missing blocks, or remove incorrect ones before saving. Saved schedules can be reopened with **Edit**.
-- **Manual entry:** **Enter schedule manually** opens a blank grid without running recognition. Labels, course codes, rooms and instructor names are optional.
-- **Break detection:** Availability follows occupied times, so unfamiliar course names do not prevent break detection. Athlete and conflict blocks count as busy time. Gaps of 10 minutes or less are passing time, so people remain unavailable between back-to-back classes. Only longer gaps count as breaks. Overlapping busy spans do not create false breaks; unclear or merged entries remain available for correction.
-- **Class and break times:** Cards show **This class ends at**, followed by the next real break’s start time. After the last class, they show when the person becomes free for the day.
-- **Share codes:** **Export** lets you select schedules and copy a self-contained code for messages. **Import** opens a pasted code on the recipient’s device. Codes use compressed data and dense Unicode text to keep messages short, require no cloud storage, and compare matching names by the overlap of their weekly busy times. More than 50% overlap skips a duplicate; 50% or less imports as Name 2, Name 3, and so on. Course wording does not affect the comparison, and existing schedules stay unchanged. Imported names can be edited in the people list. Copy the complete code, including its special characters. Codes from the earlier alphanumeric-only format must be regenerated. Existing Unicode codes without semester labels still import.
-- **Groups:** Create or edit groups in **Schedules → Manage groups**. People can belong to several groups; pinned people always stay first, while manual orders are retained within the pinned and unpinned sections. **Show groups** displays sections with the next shared break longer than 10 minutes. The compact **All/Free** button comes before the group icon and remembers the last selected view after reloading. There is no visibility checklist: each group's **Hide** button collapses its people while keeping its name, free/total count, **Show** button and **…** menu visible. **Show** expands it again. Ungrouped people can also be collapsed. The **…** menu offers **Send group to top** and **Weekly availability**. Group order and collapse states persist on this device; **Undo** can reverse sending a group to the top without expanding it or changing its members. There is no group drag-and-drop. **Hide groups** restores the main list without changing memberships. The weekly grid covers **8:15 AM to 8:05 PM**, matching the supplied school timetable. Weekend columns appear when members have weekend classes. Darker blocks mean more people are free. Transitions of 10 minutes or less are absorbed into the neighboring block with the most people free; ties extend the previous block. Select a block for exact time intervals and the available and busy names. Shared-break suggestions continue to use the original times.
-- **Schedules layout:** Picture/manual entry, share codes and the people list come before the PDF and JSON import sections.
-- **Weekend support:** Saturday and Sunday entries affect availability and next-class details.
+### Sharing and privacy
 
-### Using a schedule picture
+Export selected schedules as JSON or a self-contained share code; paste codes into **Import**. Copy the complete code, including special characters. For matching names, **more than 50% overlap** in weekly busy times skips a duplicate; otherwise it imports under a numbered name. Existing schedules remain unchanged.
 
-Crop as tightly as possible around the full timetable. Keep all grid borders, the times on the left and the day headings at the top, including any weekend columns. Remove extra space without cutting off schedule content, and keep the picture upright.
+Earlier alphanumeric codes must be regenerated. Unlabeled Unicode codes still work; semester-aware codes require an updated app.
 
-Recognition can make mistakes. Compare the detected busy times with the picture before selecting **Save schedule**. If a PDF contains only an image, use the picture importer instead.
+Picture OCR runs locally, without an OCR server or AI API. Orders, groups and Undo history are not exported. JSON retains recognition warnings; share codes retain schedules and semester labels, not review markers. Browser-storage failures show a warning when changes cannot be saved.
 
-### Running this fork
+### Running the fork
 
-Deploy the updated app files at the repository root, including `schedule-image-parser.js`, `schedule-availability.js`, `schedule-groups.js`, `schedule-share-code.js` and the complete `assets/ocr/` folder. Use HTTPS hosting such as GitHub Pages, or `http://localhost` for computer testing; opening `index.html` directly from Files may block recognition.
+Deploy the root app files and complete `assets/ocr/` folder over HTTPS or `http://localhost`; opening `index.html` directly may block recognition. OCR files load on first use and can work offline afterward on supported browsers while cached files and storage remain available.
 
-The first import loads bundled recognition files from the website. Later imports can work offline on supported browsers after those files have been cached and browser storage is retained. The app shell updates through its service worker while retaining cached OCR assets. The original deployment and version notes below describe earlier releases.
-
-Three supplied schedules were checked during picture-import development. The regression suite covers recognition and review, passing gaps and real breaks, manual entry, automatic scrolling and focus, groups, sharing and duplicate handling, semester labels, recognition warnings, undo, validation, cancellation and offline caching. The fork has also been reported working on an iPhone.
+The original version and deployment notes follow below.
 
 ## What's new in v8
 
