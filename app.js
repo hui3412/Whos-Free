@@ -3147,7 +3147,46 @@
     else renderEmptyDetail();
   }
 
+  function bindReviewGridScrolling() {
+    const grid = els.reviewGrid.closest(".review-grid-scroll");
+    const dialog = grid.closest(".schedule-modal");
+    let gesture = null;
+
+    const scrollVertically = (element, delta) => {
+      const before = Math.max(0, Math.min(element.scrollTop, element.scrollHeight - element.clientHeight));
+      const after = Math.max(0, Math.min(before + delta, element.scrollHeight - element.clientHeight));
+      element.scrollTop = after;
+      return delta - (after - before);
+    };
+    grid.addEventListener("touchstart", event => {
+      const touch = event.touches.length === 1 ? event.touches[0] : null;
+      gesture = touch ? { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastY: touch.clientY, axis: null } : null;
+    }, { passive: true });
+    grid.addEventListener("touchmove", event => {
+      if (!gesture || event.touches.length !== 1) { gesture = null; return; }
+      const touch = event.touches[0];
+      if (touch.identifier !== gesture.id) { gesture = null; return; }
+      if (!gesture.axis) {
+        const x = Math.abs(touch.clientX - gesture.x), y = Math.abs(touch.clientY - gesture.y);
+        if (Math.max(x, y) < 6) return;
+        gesture.axis = x > y ? "horizontal" : "vertical";
+      }
+      if (gesture.axis !== "vertical" || !event.cancelable) return;
+      // Route the whole vertical gesture so Safari cannot latch it to the
+      // horizontal scroller. Transfer unused motion to the surrounding dialog,
+      // including during the same swipe and when reversing at either edge.
+      event.preventDefault();
+      const delta = gesture.lastY - touch.clientY;
+      gesture.lastY = touch.clientY;
+      scrollVertically(dialog, scrollVertically(grid, delta));
+    }, { passive: false });
+    const reset = () => { gesture = null; };
+    grid.addEventListener("touchend", reset, { passive: true });
+    grid.addEventListener("touchcancel", reset, { passive: true });
+  }
+
   function bindEvents() {
+    bindReviewGridScrolling();
     document.addEventListener("click", event => {
       for (const menu of els.peopleList.querySelectorAll(".group-options[open]")) if (!menu.contains(event.target)) menu.open = false;
     });
@@ -3295,7 +3334,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=38", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=39", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
