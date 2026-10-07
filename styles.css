@@ -940,7 +940,7 @@ input[type="time"]:disabled {
 .modal-backdrop.import-progress-overlay {
   z-index: 1000;
   background: rgba(0, 0, 0, .78);
-  touch-action: none;
+  touch-action: pan-y;
   overscroll-behavior: contain;
 }
 
@@ -952,12 +952,18 @@ input[type="time"]:disabled {
   background: var(--panel);
   color: var(--text);
   text-align: center;
+  max-height: 100%;
+  overflow-y: auto;
   box-shadow: 0 18px 60px rgba(0, 0, 0, .35);
 }
 
 .import-progress-card h2 { margin: 0 0 12px; font-size: 1.15rem; font-weight: 500; }
 #importProgressMessage { margin: 0; line-height: 1.55; overflow-wrap: anywhere; }
 .import-progress-note { margin: 14px 0 0; color: var(--muted); font-size: .85rem; }
+#importProgressOverlay [hidden] { display: none !important; }
+.import-picture-name { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); text-align: left; }
+.import-picture-name input { width: 100%; min-height: 44px; font-size: 16px; }
+.import-picture-name button { margin-top: 14px; min-height: 44px; }
 .import-progress-spinner {
   width: 28px;
   height: 28px;
