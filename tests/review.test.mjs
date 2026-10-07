@@ -101,9 +101,11 @@ test("picture review validates, saves corrections and preserves data on cancel",
     assert.equal(stored().data.people["Manual Person"].classes[0].end, "12:00");
     window.document.querySelector('[aria-label="Edit Manual Person"]').click();
     assert.equal(el("imageReviewName").value, "Manual Person");
+    el("reviewGrid").querySelector(".review-grid-block").click();
     window.document.querySelector(".review-class .mini-danger-button").click();
     assert.equal(el("reviewGrid").querySelectorAll(".review-grid-block").length, 1);
     el("cancelImageScheduleButton").click();
     assert.equal(stored().data.people["Manual Person"].classes.length, 2);
   } finally { await window.happyDOM.abort(); }
 });
+

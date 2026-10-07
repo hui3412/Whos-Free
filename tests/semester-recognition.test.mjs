@@ -92,8 +92,10 @@ test("uncertainty uses only inline warning icons and a count directly above Save
     assert.equal(stored().data.people.Student.classes[0].review_warning, warning);
     window.document.querySelector('[aria-label="Edit Student"]').click();
     assert.match(el("recognitionReviewSummary").textContent, /2 uncertain detections/);
+    el("reviewGrid").querySelector(".review-grid-block").click();
     window.document.querySelector(".review-class:not([hidden]) .mini-danger-button").click();
     assert.match(el("recognitionReviewSummary").textContent, /1 uncertain detection\./);
+    el("reviewGrid").querySelector(".review-grid-block").click();
     window.document.querySelector(".review-class:not([hidden]) .mini-danger-button").click();
     assert.equal(el("recognitionReviewNotice").hidden, true);
   } finally { await window.happyDOM.abort(); }
@@ -241,3 +243,4 @@ test("main cards show only older semesters and the current-term shortcut retains
     assert.equal(el("useCurrentSemesterButton").hidden, true);
   } finally { await window.happyDOM.abort(); }
 });
+
