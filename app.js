@@ -94,6 +94,8 @@
     saveImageScheduleButton: document.getElementById("saveImageScheduleButton"),
     cancelImageScheduleButton: document.getElementById("cancelImageScheduleButton"),
     scheduleModal: document.getElementById("scheduleModal"),
+    advancedScheduleOptions: document.getElementById("advancedScheduleOptions"),
+    advancedSchedulePanel: document.getElementById("advancedSchedulePanel"),
     closeScheduleModal: document.getElementById("closeScheduleModal"),
     scheduleStorageStatus: document.getElementById("scheduleStorageStatus"),
     addSchedulePdfButton: document.getElementById("addSchedulePdfButton"),
@@ -1680,7 +1682,7 @@
     els.freeCount.textContent = "Local only";
     els.statusLine.textContent = state.loadError
       ? "Schedule data needs your attention."
-      : "Add a schedule PDF or import a shared database.";
+      : "Add a schedule picture or create one manually.";
     els.viewToggleButton.disabled = true;
     els.peopleList.replaceChildren();
 
@@ -1693,8 +1695,7 @@
       message.textContent = state.loadError;
     }
 
-    fragment.querySelector(".choose-schedules").addEventListener("click", chooseScheduleFile);
-    fragment.querySelector(".add-pdf").addEventListener("click", chooseSchedulePdf);
+    fragment.querySelector(".create-schedule").addEventListener("click", () => { openScheduleModal(); openManualSchedule(); });
     fragment.querySelector(".add-picture").addEventListener("click", chooseScheduleImage);
     els.peopleList.append(fragment);
     renderEmptyDetail();
@@ -2792,6 +2793,7 @@
     els.scheduleModal.hidden = false;
     document.body.style.overflow = "hidden";
     if (!wasHidden) return;
+    els.advancedScheduleOptions.open = false;
     els.scheduleModal.querySelector(".schedule-modal").scrollTop = 0;
     requestAnimationFrame(() => {
       animateModalOpen(els.scheduleModal, els.scheduleModal.querySelector(".schedule-modal"));
@@ -3291,6 +3293,9 @@
     els.breakNotificationToggle.addEventListener("change", handleNotificationToggle);
     els.testNotificationButton.addEventListener("click", sendTestNotification);
     els.addSchedulePdfButton.addEventListener("click", chooseSchedulePdf);
+    els.advancedScheduleOptions.addEventListener("toggle", () => {
+      if (els.advancedScheduleOptions.open && !els.scheduleModal.hidden) revealSection(els.advancedSchedulePanel);
+    });
     els.addScheduleImageButton.addEventListener("click", chooseScheduleImage);
     els.scheduleImageInput.addEventListener("change", handleScheduleImage);
     els.manualScheduleButton.addEventListener("click", () => openManualSchedule());
@@ -3367,6 +3372,12 @@
       const openMenu = els.peopleList.querySelector(".group-options[open]");
       if (openMenu) { event.preventDefault(); openMenu.open = false; openMenu.querySelector("summary").focus(); return; }
       if (state.duplicatePicture) { event.preventDefault(); dismissDuplicatePicture(true); return; }
+      if (!els.scheduleModal.hidden && els.advancedScheduleOptions.open) {
+        event.preventDefault();
+        els.advancedScheduleOptions.open = false;
+        els.advancedScheduleOptions.querySelector("summary").focus({ preventScroll: true });
+        return;
+      }
       if (!els.groupWeekModal.hidden) closeGroupWeek();
       else if (!els.groupsModal.hidden) closeGroupsModal();
       else if (!els.settingsModal.hidden) closeSettingsModal();
@@ -3410,7 +3421,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=40", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=41", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

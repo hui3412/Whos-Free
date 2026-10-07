@@ -176,10 +176,27 @@ test("reimporting a kept-both schedule still prompts for the original name but i
   } finally { await receiver.window.happyDOM.abort(); }
 });
 
-test("PDF and JSON sections follow the people list without moving the earlier sections", async () => {
+test("PDF and JSON tools are closed behind a bottom menu without moving the earlier sections", async () => {
   const receiver = await app(null);
   try {
     const titles = [...receiver.el("scheduleModal").querySelectorAll(':scope > section > .schedule-action-section')].map(e => e.getAttribute("aria-labelledby"));
-    assert.deepEqual(titles, ["scheduleGroupsTitle", "addPictureTitle", "imageReviewTitle", "shareCodeTitle", "peopleManagerTitle", "addScheduleTitle", "databaseTitle"]);
+    assert.deepEqual(titles, ["scheduleGroupsTitle", "addPictureTitle", "imageReviewTitle", "shareCodeTitle", "peopleManagerTitle"]);
+    const menu = receiver.el("advancedScheduleOptions");
+    assert.equal(menu.open, false);
+    assert.equal(menu.parentElement.lastElementChild, menu);
+    assert.equal(menu.querySelector("summary").getAttribute("aria-label"), "Advanced schedule options");
+    for (const id of ["addSchedulePdfButton", "importSchedulesButton", "shareSchedulesButton", "removeSchedulesButton"]) assert.ok(menu.contains(receiver.el(id)));
+    assert.equal(receiver.window.document.querySelector(".add-pdf, .choose-schedules"), null, "the empty state must not bypass the advanced menu");
+    receiver.el("scheduleDataButton").click();
+    menu.open = true;
+    menu.dispatchEvent(new receiver.window.Event("toggle"));
+    await receiver.wait();
+    receiver.window.document.dispatchEvent(new receiver.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    assert.equal(menu.open, false);
+    assert.equal(receiver.el("scheduleModal").hidden, false, "Escape closes the menu before the dialog");
+    menu.open = true;
+    receiver.el("closeScheduleModal").click();
+    receiver.el("scheduleDataButton").click();
+    assert.equal(menu.open, false, "advanced tools start hidden on each new visit");
   } finally { await receiver.window.happyDOM.abort(); }
 });
