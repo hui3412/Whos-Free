@@ -2733,6 +2733,36 @@
     }
   }
 
+  function updateScheduleFlow() {
+    const dialog = els.scheduleModal.querySelector(".schedule-modal");
+    const sharing = els.codeImportPanel.closest(".schedule-action-section");
+    const flow = state.pendingImage ? "review" : state.codeMode ? `code-${state.codeMode}` : "";
+    const previous = dialog.dataset.scheduleFlow || "";
+    const activeSection = flow === "review" ? els.imageReview : state.codeMode ? sharing : null;
+
+    for (const section of dialog.children) {
+      if (section.classList.contains("modal-header")) continue;
+      section.hidden = section === els.imageReview ? flow !== "review" : Boolean(flow) && section !== activeSection;
+    }
+    for (const section of sharing.children) {
+      if (section === els.codeImportPanel || section === els.codeExportPanel) continue;
+      section.hidden = Boolean(state.codeMode);
+    }
+    els.codeImportPanel.hidden = state.codeMode !== "import";
+    els.codeExportPanel.hidden = state.codeMode !== "export";
+    document.getElementById("scheduleModalTitle").textContent = flow === "review" ? "Review schedule" : flow === "code-import" ? "Import schedules" : flow === "code-export" ? "Share schedules" : "Schedule data";
+    dialog.querySelector(".modal-header p").hidden = Boolean(flow);
+    if (flow) dialog.dataset.scheduleFlow = flow;
+    else delete dialog.dataset.scheduleFlow;
+    if (previous !== flow) {
+      dialog.scrollTop = 0;
+      if (!flow && !els.scheduleModal.hidden && !state.importProgress) {
+        const target = previous === "review" ? els.addScheduleImageButton : previous === "code-export" ? els.exportSchedulesButton : els.importCodeButton;
+        target.focus({ preventScroll: true });
+      }
+    }
+  }
+
   function updateScheduleModal() {
     updateUndoControls();
     updateGroupToolbar();
@@ -2784,6 +2814,7 @@
         </div>`;
       els.importSchedulesButton.textContent = "Import schedules.json";
     }
+    updateScheduleFlow();
     updateSettingsModal();
   }
 
@@ -3421,7 +3452,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=41", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=42", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
