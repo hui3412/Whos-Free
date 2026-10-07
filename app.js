@@ -3343,16 +3343,48 @@
     const grid = els.reviewGrid.closest(".review-grid-scroll");
     const dialog = grid.closest(".schedule-modal");
     let gesture = null;
+    let momentumFrame = null;
+
+    const stopMomentum = () => {
+      if (momentumFrame !== null) cancelAnimationFrame(momentumFrame);
+      momentumFrame = null;
+    };
 
     const scrollVertically = (element, delta) => {
-      const before = Math.max(0, Math.min(element.scrollTop, element.scrollHeight - element.clientHeight));
-      const after = Math.max(0, Math.min(before + delta, element.scrollHeight - element.clientHeight));
+      const limit = Math.max(0, element.scrollHeight - element.clientHeight);
+      const before = Math.max(0, Math.min(element.scrollTop, limit));
+      const after = Math.max(0, Math.min(before + delta, limit));
       element.scrollTop = after;
       return delta - (after - before);
     };
+    const scroll = delta => scrollVertically(dialog, scrollVertically(grid, delta));
+    const startMomentum = velocity => {
+      let previous = performance.now();
+      // Exponential slowing keeps the release smooth at any display refresh
+      // rate. Integrate the distance rather than stepping a fixed pixel count.
+      const frame = now => {
+        momentumFrame = null;
+        if (els.scheduleModal.hidden || els.imageReview.hidden || state.importProgress) return;
+        const elapsed = Math.min(48, Math.max(0, now - previous));
+        previous = now;
+        const decay = Math.exp(-elapsed / 325);
+        const remaining = scroll(velocity * 325 * (1 - decay));
+        velocity *= decay;
+        if (Math.abs(remaining) > .5 || Math.abs(velocity) < .03) return;
+        momentumFrame = requestAnimationFrame(frame);
+      };
+      momentumFrame = requestAnimationFrame(frame);
+    };
+    // Touching anywhere, using another input, or hiding the tab interrupts a
+    // coast immediately, including a touch outside the timetable itself.
+    for (const type of ["touchstart", "pointerdown", "wheel", "keydown", "click"]) {
+      document.addEventListener(type, stopMomentum, { capture: true, passive: true });
+    }
+    document.addEventListener("visibilitychange", stopMomentum);
     grid.addEventListener("touchstart", event => {
       const touch = event.touches.length === 1 ? event.touches[0] : null;
-      gesture = touch ? { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastY: touch.clientY, axis: null } : null;
+      const now = performance.now();
+      gesture = touch ? { id: touch.identifier, x: touch.clientX, y: touch.clientY, lastY: touch.clientY, lastTime: now, samples: [{ y: touch.clientY, time: now }], direction: 0, axis: null } : null;
     }, { passive: true });
     grid.addEventListener("touchmove", event => {
       if (!gesture || event.touches.length !== 1) { gesture = null; return; }
@@ -3363,18 +3395,39 @@
         if (Math.max(x, y) < 6) return;
         gesture.axis = x > y ? "horizontal" : "vertical";
       }
-      if (gesture.axis !== "vertical" || !event.cancelable) return;
+      if (gesture.axis !== "vertical") return;
+      if (!event.cancelable) { gesture = null; return; }
       // Route the whole vertical gesture so Safari cannot latch it to the
       // horizontal scroller. Transfer unused motion to the surrounding dialog,
       // including during the same swipe and when reversing at either edge.
       event.preventDefault();
       const delta = gesture.lastY - touch.clientY;
+      const now = performance.now();
+      // A reversal starts a fresh velocity estimate rather than carrying the
+      // earlier direction into the release. A pause before lifting cancels it.
+      if (delta && gesture.direction && Math.sign(delta) !== gesture.direction) {
+        gesture.samples = [{ y: gesture.lastY, time: gesture.lastTime }];
+      }
+      if (delta) gesture.direction = Math.sign(delta);
+      gesture.samples.push({ y: touch.clientY, time: now });
+      while (gesture.samples.length > 2 && now - gesture.samples[0].time > 100) gesture.samples.shift();
       gesture.lastY = touch.clientY;
-      scrollVertically(dialog, scrollVertically(grid, delta));
+      gesture.lastTime = now;
+      scroll(delta);
     }, { passive: false });
     const reset = () => { gesture = null; };
-    grid.addEventListener("touchend", reset, { passive: true });
-    grid.addEventListener("touchcancel", reset, { passive: true });
+    grid.addEventListener("touchend", event => {
+      const released = gesture;
+      reset();
+      if (!released || released.axis !== "vertical" || event.touches.length || performance.now() - released.lastTime >= 100) return;
+      if (event.changedTouches?.length && !Array.from(event.changedTouches).some(touch => touch.identifier === released.id)) return;
+      const first = released.samples[0], last = released.samples.at(-1);
+      const duration = last.time - first.time;
+      if (duration <= 0) return;
+      const velocity = Math.max(-3.5, Math.min(3.5, (first.y - last.y) / duration)) * Math.exp(-(performance.now() - last.time) / 80);
+      if (Math.abs(velocity) >= .08) startMomentum(velocity);
+    }, { passive: true });
+    grid.addEventListener("touchcancel", () => { reset(); stopMomentum(); }, { passive: true });
   }
 
   function bindEvents() {
@@ -3570,7 +3623,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=45", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=46", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
