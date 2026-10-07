@@ -2432,6 +2432,14 @@ button:disabled { cursor: not-allowed; }
 .modal-header p { font-size: .86rem; line-height: 1.55; }
 .modal-close { width: 42px; height: 42px; }
 .schedule-action-section, .settings-section { border: 0; background: transparent; border-radius: 0; padding: 0; margin-top: 28px; }
+.schedule-advanced-options { margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--border); }
+.advanced-options-toggle { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 0; cursor: pointer; list-style: none; }
+.advanced-options-toggle::-webkit-details-marker { display: none; }
+.advanced-options-toggle::marker { content: ""; }
+.advanced-options-toggle svg { width: 22px; height: 22px; fill: currentColor; }
+.advanced-schedule-panel { margin-top: 14px; }
+.schedule-advanced-options:not([open]) > .advanced-schedule-panel { display: none; }
+.advanced-options-note { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.55; }
 .schedule-action-section h3, .settings-section h3 { font-size: 1rem; font-weight: 500; margin-bottom: 8px; }
 .schedule-action-section > p, .settings-description { font-size: .86rem; line-height: 1.6; }
 .section-kicker, .storage-status-label, .theme-template-label { color: var(--muted); font-weight: 500; letter-spacing: .03em; }
