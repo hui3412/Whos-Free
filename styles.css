@@ -2175,6 +2175,9 @@ input[type="time"],
 
 /* Weekly review: one pixel per minute, with a horizontally scrollable week. */
 .review-grid-scroll { overflow-x: auto; margin: 16px 0; border: 1px solid var(--border); border-radius: 10px; }
+/* Keep native horizontal swipes and pinch zoom. Vertical touch movement is
+   shared by the review grid and its dialog, even after reaching an edge. */
+#imageReview .review-grid-scroll { touch-action: pan-x pinch-zoom; overscroll-behavior-y: auto; }
 .review-grid { display: grid; grid-template-columns: 54px repeat(7, minmax(110px, 1fr)); min-width: 850px; }
 .review-time-axis { position: relative; }
 .review-time-axis span { position: absolute; left: 3px; font-size: 11px; color: var(--muted); transform: translateY(-50%); }
