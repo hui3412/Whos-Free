@@ -834,8 +834,9 @@
   }
 
   function rememberScheduleChange(before, label) {
-    if (before.hasData === state.hasData && JSON.stringify(before.data) === JSON.stringify(state.data)) return;
+    if (before.hasData === state.hasData && JSON.stringify(before.data) === JSON.stringify(state.data)) return false;
     rememberUndoChange({ ...before, label, afterPreferences: scheduleUndoPreferences() });
+    return true;
   }
 
   function rememberUndoChange(change) {
@@ -1638,6 +1639,10 @@
   }
 
   function showToast(message) {
+    if (state.importProgress) {
+      state.importProgress.toast = message;
+      return;
+    }
     els.toast.textContent = message;
     els.toast.hidden = false;
     if (canAnimate()) {
@@ -1766,6 +1771,21 @@
     const target = focusTarget || operation.focusReturn;
     if (target?.isConnected && !target.disabled && !target.closest("[hidden], [inert]")) target.focus({ preventScroll: true });
     else (hasDialog ? els.closeScheduleModal : els.scheduleDataButton).focus({ preventScroll: true });
+    if (operation.toast) showToast(operation.toast);
+  }
+
+  function scheduleImportToast(before) {
+    const oldPeople = before.hasData ? before.data.people || {} : {};
+    const newPeople = peopleMap();
+    let added = 0, updated = 0;
+    for (const [name, person] of Object.entries(newPeople)) {
+      if (!Object.prototype.hasOwnProperty.call(oldPeople, name)) added++;
+      else if (JSON.stringify(oldPeople[name]) !== JSON.stringify(person)) updated++;
+    }
+    const parts = [];
+    if (added) parts.push(`${added} schedule${added === 1 ? "" : "s"} added`);
+    if (updated) parts.push(`${updated} schedule${updated === 1 ? "" : "s"} updated`);
+    return parts.join(" · ") || "No schedule changes";
   }
 
   function setImageStatus(message, tone = "working") {
@@ -2061,10 +2081,10 @@
       }
       state.selectedPerson = name;
       const warning = await persistCurrentDatabase("Local schedule collection");
-      rememberScheduleChange(before, `${editingName ? "Edited" : replacement ? "Replaced" : "Added"} ${name}'s schedule`);
+      const changed = rememberScheduleChange(before, `${editingName ? "Edited" : replacement ? "Replaced" : "Added"} ${name}'s schedule`);
       clearImageReview();
       setImageStatus(`Saved ${classes.length} schedule entries for ${name} on this device.`, "success");
-      showToast(warning || `Saved ${name}'s schedule`);
+      showToast(warning || (changed ? `Schedule ${editingName ? "updated" : replacement ? "replaced" : "added"}: ${displayName(name)}` : "No schedule changes"));
     } catch (error) { els.imageReviewError.textContent = error.message; }
     finally { state.isParsing = false; updateScheduleModal(); }
   }
@@ -2344,7 +2364,7 @@
         if (updated) resultParts.push(`${updated} updated`);
         if (failures.length) resultParts.push(`${failures.length} failed`);
         setParserStatus(`Done — ${resultParts.join(" · ")}.`, failures.length ? "warning" : "success");
-        showToast(warning || `Schedule database updated: ${resultParts.join(", ")}`);
+        showToast(warning || `${scheduleImportToast(before)}${failures.length ? ` · ${failures.length} failed` : ""}`);
       } else {
         setParserStatus(failures[0] || "No schedules were added.", "error");
       }
@@ -2534,9 +2554,9 @@
       applyAutomaticSemester(imported);
       const result = await window.WhosFreeShareCode.merge(state.hasData ? state.data : null, imported, resolveCodeConflict);
       validateData(result.data);
+      const before = captureScheduleChange();
       let warning = null;
       if (result.added || result.replaced) {
-        const before = captureScheduleChange();
         state.data = result.data;
         warning = await persistCurrentDatabase("Local schedule collection");
         rememberScheduleChange(before, `Imported ${result.added} and replaced ${result.replaced || 0} schedules from a code`);
@@ -2544,6 +2564,7 @@
       const renameNote = result.renamed.length ? ` Imported different schedules as ${result.renamed.map(item => item.to).join(", ")}. You can edit their names in the people list.` : "";
       const choicesNote = result.replaced || result.kept ? ` Replaced ${result.replaced || 0}. Kept ${result.kept || 0} old schedules.` : "";
       codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} identical schedules.${choicesNote}${renameNote}`, warning ? "error" : "success");
+      showToast(warning || scheduleImportToast(before));
     } catch (error) {
       codeStatus(els.importCodeStatus, error.message || "The code could not be imported.", "error");
     } finally { finishCodeConflict(null); state.isParsing = false; updateScheduleModal(); endImportProgress(els.decodeCodeButton); els.decodeCodeButton.focus({ preventScroll: true }); }
@@ -2566,8 +2587,6 @@
 
       const existingPeople = hadData ? (state.data.people || {}) : {};
       const importedPeople = imported.people || {};
-      const duplicateNames = Object.keys(importedPeople).filter(name => Object.prototype.hasOwnProperty.call(existingPeople, name));
-
       const merged = {
         schema_version: imported.schema_version || state.data.schema_version || 1,
         people: {
@@ -2587,9 +2606,7 @@
 
       closeScheduleModal();
       updateScheduleModal();
-      const importedCount = Object.keys(importedPeople).length;
-      const duplicateText = duplicateNames.length ? ` · ${duplicateNames.length} updated` : "";
-      showToast(warning || `Imported ${importedCount} ${importedCount === 1 ? "person" : "people"}${duplicateText}`);
+      showToast(warning || scheduleImportToast(before));
     } catch (error) {
       const message = `That file could not be loaded: ${error.message}`;
       if (hadData) {
@@ -2695,7 +2712,7 @@
       renderDataSetup();
       updateScheduleModal();
       updateSettingsModal();
-      showToast(`Removed ${displayName(name)}`);
+      showToast(`Schedule removed: ${displayName(name)}`);
       return;
     }
 
@@ -2704,7 +2721,7 @@
     state.isParsing = false;
     updateScheduleModal();
     updateSettingsModal();
-    showToast(warning || `Removed ${displayName(name)}`);
+    showToast(warning || `Schedule removed: ${displayName(name)}`);
   }
 
   function renderPeopleManager() {
@@ -2888,7 +2905,7 @@
     renderDataSetup();
     updateScheduleModal();
     updateSettingsModal();
-    showToast("Removed local schedule data");
+    showToast("All local schedules removed");
   }
 
   function renderPersonCard(name, day, minute, scope = "main") {
@@ -3479,7 +3496,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=43", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=44", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

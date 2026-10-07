@@ -693,7 +693,8 @@ input[type="time"]:disabled {
   left: 50%;
   bottom: max(22px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  z-index: 50;
+  z-index: 110;
+  pointer-events: none;
   background: var(--text);
   color: var(--bg);
   border-radius: 999px;
