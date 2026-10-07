@@ -1774,7 +1774,7 @@
     updateImportProgress(message);
   }
 
-  function addReviewClass(item = {}) {
+  function addReviewClass(item = {}, openEditor = true) {
     const card = document.createElement("fieldset");
     card.className = "review-class";
     card.dataset.kind = item.kind || "class";
@@ -1807,12 +1807,26 @@
     remove.className = "mini-danger-button";
     remove.type = "button";
     remove.textContent = "Remove busy block";
-    remove.addEventListener("click", () => { card.remove(); const first = els.imageReviewClasses.querySelector(".review-class"); if (first) selectReviewCard(first); renderReviewGrid(); });
-    card.append(remove);
+    remove.addEventListener("click", () => {
+      card.remove();
+      selectReviewCard(null);
+      renderReviewGrid();
+      revealSection(els.addReviewClassButton, els.addReviewClassButton);
+    });
+    const done = document.createElement("button");
+    done.className = "secondary-button";
+    done.type = "button";
+    done.textContent = "Done editing";
+    done.addEventListener("click", () => {
+      selectReviewCard(null);
+      revealSection(els.addReviewClassButton, els.addReviewClassButton);
+    });
+    card.append(done, remove);
     els.imageReviewClasses.append(card);
     card.addEventListener("input", renderReviewGrid);
     card.addEventListener("change", renderReviewGrid);
-    selectReviewCard(card);
+    if (openEditor) selectReviewCard(card);
+    else card.hidden = true;
     renderReviewGrid();
   }
 
@@ -1822,6 +1836,8 @@
 
   function selectReviewCard(card) {
     els.imageReviewClasses.querySelectorAll(".review-class").forEach(item => { item.hidden = item !== card; });
+    els.imageReviewClasses.hidden = !card;
+    els.addReviewClassButton.setAttribute("aria-expanded", String(Boolean(card)));
   }
 
   function renderReviewGrid() {
@@ -1901,12 +1917,13 @@
     setReviewSemester(person.semester, !name);
     els.imageReviewClasses.replaceChildren();
     els.imageReviewPreview.closest("details").hidden = true;
-    person.classes.forEach(addReviewClass);
+    person.classes.forEach(item => addReviewClass(item, false));
+    selectReviewCard(null);
     renderReviewGrid();
     els.imageReview.hidden = false;
     openScheduleModal();
     updateScheduleModal();
-    setImageStatus("Add busy times using a day’s + button. Empty time is free; labels are optional.", "success");
+    setImageStatus("Check the schedule or choose Add a class to add busy time. Empty time is free; labels are optional.", "success");
     revealSection(els.imageReview, els.imageReviewName);
   }
 
@@ -1935,6 +1952,7 @@
     state.imagePreviewUrl = null;
     els.imageReviewPreview.removeAttribute("src");
     els.imageReviewClasses.replaceChildren();
+    selectReviewCard(null);
     els.imageReview.hidden = true;
     els.imageReviewError.textContent = "";
     updateScheduleModal();
@@ -1957,8 +1975,8 @@
       els.imageReviewName.value = result.name || "";
       setReviewSemester(result.person.semester, true);
       els.imageReviewClasses.replaceChildren();
-      result.person.classes.forEach(addReviewClass);
-      selectReviewCard(els.imageReviewClasses.querySelector(".review-class"));
+      result.person.classes.forEach(item => addReviewClass(item, false));
+      selectReviewCard(null);
       els.imageReview.hidden = false;
       if (els.scheduleModal.hidden) openScheduleModal();
       const busyCount = result.person.classes.filter(item => item.kind === "busy_block").length;
@@ -2005,7 +2023,16 @@
     // Define an own property safely even if a person's name is __proto__.
     Object.defineProperty(workingData.people, name, { value: { ...state.pendingImage.person, source_file: state.pendingImage.person.source_file, semester, classes }, writable: true, enumerable: true, configurable: true });
     try { validateData(workingData); }
-    catch (error) { els.imageReviewError.textContent = error.message; return; }
+    catch (error) {
+      els.imageReviewError.textContent = error.message;
+      const invalidIndex = classes.findIndex(item => !ALL_DAYS.includes(item.day) || !Number.isFinite(toMinutes(item.start)) || !Number.isFinite(toMinutes(item.end)) || toMinutes(item.end) <= toMinutes(item.start));
+      if (invalidIndex !== -1) {
+        const card = els.imageReviewClasses.children[invalidIndex];
+        selectReviewCard(card);
+        revealSection(card, card.querySelector('[data-field="start"]'));
+      }
+      return;
+    }
     if (matchingName && !approved) {
       state.duplicatePicture = { requestedName, existingName: matchingName };
       els.duplicatePictureMessage.textContent = `A schedule for ${matchingName} already exists. Replace it, keep both as ${nextPictureName(requestedName, workingData.people)}, or cancel?`;
@@ -3452,7 +3479,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=42", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=43", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
