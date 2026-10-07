@@ -17,6 +17,7 @@
     theme: loadTheme(),
     loadError: null,
     isParsing: false,
+    importProgress: null,
     pendingImage: null,
     duplicatePicture: null,
     codeConflict: null,
@@ -97,6 +98,8 @@
     scheduleStorageStatus: document.getElementById("scheduleStorageStatus"),
     addSchedulePdfButton: document.getElementById("addSchedulePdfButton"),
     parserStatus: document.getElementById("parserStatus"),
+    importProgressOverlay: document.getElementById("importProgressOverlay"),
+    importProgressMessage: document.getElementById("importProgressMessage"),
     importSchedulesButton: document.getElementById("importSchedulesButton"),
     shareSchedulesButton: document.getElementById("shareSchedulesButton"),
     exportSchedulesButton: document.getElementById("exportSchedulesButton"),
@@ -1724,9 +1727,50 @@
     els.scheduleImageInput.click();
   }
 
+  function startImportProgress(message) {
+    if (state.importProgress) { updateImportProgress(message); return; }
+    const overlay = els.importProgressOverlay;
+    state.importProgress = {
+      focusReturn: document.activeElement,
+      bodyOverflow: document.body.style.overflow,
+      hadDialog: [...document.querySelectorAll(".modal-backdrop")].some(element => element !== overlay && !element.hidden),
+      background: [...document.body.children].filter(element => element !== overlay && !["SCRIPT", "TEMPLATE"].includes(element.tagName)).map(element => ({ element, inert: element.hasAttribute("inert"), ariaHidden: element.getAttribute("aria-hidden") })),
+    };
+    els.importProgressMessage.textContent = message;
+    overlay.hidden = false;
+    document.body.style.overflow = "hidden";
+    overlay.focus({ preventScroll: true });
+    for (const { element } of state.importProgress.background) {
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function updateImportProgress(message) {
+    if (state.importProgress) els.importProgressMessage.textContent = message;
+  }
+
+  function endImportProgress(focusTarget = null) {
+    const operation = state.importProgress;
+    if (!operation) return;
+    state.importProgress = null;
+    els.importProgressOverlay.hidden = true;
+    for (const { element, inert, ariaHidden } of operation.background) {
+      if (!inert) element.removeAttribute("inert");
+      if (ariaHidden === null) element.removeAttribute("aria-hidden");
+      else element.setAttribute("aria-hidden", ariaHidden);
+    }
+    const hasDialog = [...document.querySelectorAll(".modal-backdrop")].some(element => !element.hidden);
+    document.body.style.overflow = hasDialog ? "hidden" : operation.hadDialog ? "" : operation.bodyOverflow;
+    const target = focusTarget || operation.focusReturn;
+    if (target?.isConnected && !target.disabled && !target.closest("[hidden], [inert]")) target.focus({ preventScroll: true });
+    else (hasDialog ? els.closeScheduleModal : els.scheduleDataButton).focus({ preventScroll: true });
+  }
+
   function setImageStatus(message, tone = "working") {
     els.imageParserStatus.textContent = message;
     els.imageParserStatus.dataset.tone = tone;
+    updateImportProgress(message);
   }
 
   function addReviewClass(item = {}) {
@@ -1902,6 +1946,7 @@
     state.isParsing = true;
     updateScheduleModal();
     setImageStatus("Reading the picture on this device…");
+    startImportProgress("Reading the picture on this device…");
     try {
       const result = await window.WhosFreeImageParser.parseScheduleImage(file, { onProgress: message => setImageStatus(message) });
       state.pendingImage = { ...result, isPicture: true };
@@ -1925,6 +1970,7 @@
       state.isParsing = false;
       event.target.value = "";
       updateScheduleModal();
+      endImportProgress(state.pendingImage ? document.getElementById("imageReviewTitle") : els.addScheduleImageButton);
     }
   }
 
@@ -2201,6 +2247,7 @@
   function setParserStatus(message, tone = "") {
     els.parserStatus.textContent = message || "";
     els.parserStatus.dataset.tone = tone;
+    updateImportProgress(message);
   }
 
   async function parsePdfWithNameFallback(file) {
@@ -2232,53 +2279,60 @@
     els.importSchedulesButton.disabled = true;
     els.shareSchedulesButton.disabled = true;
     setParserStatus(`Reading ${files.length === 1 ? files[0].name : `${files.length} schedule PDFs`}…`, "working");
+    startImportProgress("Reading schedule PDFs…");
 
-    const workingData = state.hasData
-      ? JSON.parse(JSON.stringify(state.data))
-      : { schema_version: 1, people: {} };
-    if (!workingData.schema_version) workingData.schema_version = 1;
-    if (!workingData.people || typeof workingData.people !== "object") workingData.people = {};
+    try {
+      const workingData = state.hasData
+        ? JSON.parse(JSON.stringify(state.data))
+        : { schema_version: 1, people: {} };
+      if (!workingData.schema_version) workingData.schema_version = 1;
+      if (!workingData.people || typeof workingData.people !== "object") workingData.people = {};
 
-    let added = 0;
-    let updated = 0;
-    const failures = [];
+      let added = 0;
+      let updated = 0;
+      const failures = [];
 
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-      setParserStatus(`Reading ${file.name} (${index + 1} of ${files.length})…`, "working");
-      try {
-        const parsed = await parsePdfWithNameFallback(file);
-        if (Object.prototype.hasOwnProperty.call(workingData.people, parsed.name)) updated += 1;
-        else added += 1;
-        workingData.people[parsed.name] = applyAutomaticSemester({ people: { person: parsed.person } }).people.person;
-      } catch (error) {
-        failures.push(`${file.name}: ${error.message}`);
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        setParserStatus(`Reading ${file.name} (${index + 1} of ${files.length})…`, "working");
+        try {
+          const parsed = await parsePdfWithNameFallback(file);
+          if (Object.prototype.hasOwnProperty.call(workingData.people, parsed.name)) updated += 1;
+          else added += 1;
+          workingData.people[parsed.name] = applyAutomaticSemester({ people: { person: parsed.person } }).people.person;
+        } catch (error) {
+          failures.push(`${file.name}: ${error.message}`);
+        }
       }
-    }
 
-    if (added || updated) {
-      const before = captureScheduleChange();
-      state.data = workingData;
-      state.selectedPerson = null;
-      const warning = await persistCurrentDatabase("Local schedule collection");
-      rememberScheduleChange(before, `Imported ${added + updated} PDF schedule${added + updated === 1 ? "" : "s"}`);
-      const resultParts = [];
-      if (added) resultParts.push(`${added} added`);
-      if (updated) resultParts.push(`${updated} updated`);
-      if (failures.length) resultParts.push(`${failures.length} failed`);
-      setParserStatus(`Done — ${resultParts.join(" · ")}.`, failures.length ? "warning" : "success");
-      showToast(warning || `Schedule database updated: ${resultParts.join(", ")}`);
-    } else {
-      setParserStatus(failures[0] || "No schedules were added.", "error");
-    }
+      if (added || updated) {
+        const before = captureScheduleChange();
+        state.data = workingData;
+        state.selectedPerson = null;
+        const warning = await persistCurrentDatabase("Local schedule collection");
+        rememberScheduleChange(before, `Imported ${added + updated} PDF schedule${added + updated === 1 ? "" : "s"}`);
+        const resultParts = [];
+        if (added) resultParts.push(`${added} added`);
+        if (updated) resultParts.push(`${updated} updated`);
+        if (failures.length) resultParts.push(`${failures.length} failed`);
+        setParserStatus(`Done — ${resultParts.join(" · ")}.`, failures.length ? "warning" : "success");
+        showToast(warning || `Schedule database updated: ${resultParts.join(", ")}`);
+      } else {
+        setParserStatus(failures[0] || "No schedules were added.", "error");
+      }
 
-    if (failures.length > 1) {
-      console.warn("Who’s Free? PDF import errors\n" + failures.join("\n"));
-    }
+      if (failures.length > 1) {
+        console.warn("Who’s Free? PDF import errors\n" + failures.join("\n"));
+      }
 
-    state.isParsing = false;
-    updateScheduleModal();
-    event.target.value = "";
+    } catch (error) {
+      setParserStatus(error.message || "The PDFs could not be imported.", "error");
+    } finally {
+      state.isParsing = false;
+      updateScheduleModal();
+      event.target.value = "";
+      endImportProgress(els.addSchedulePdfButton);
+    }
   }
 
   function databaseJsonText() {
@@ -2337,6 +2391,7 @@
   function codeStatus(element, message, tone = "") {
     element.textContent = message;
     element.dataset.tone = tone;
+    if (element === els.importCodeStatus) updateImportProgress(message);
   }
 
   function exportSelectionChanged() {
@@ -2421,6 +2476,7 @@
 
   function resolveCodeConflict(conflict) {
     return new Promise(resolve => {
+      endImportProgress();
       state.codeConflict = { resolve };
       els.codeConflictMessage.textContent = `A different schedule for ${conflict.existingName} already exists. Keep both as ${conflict.newName}, replace the old schedule, or keep the old one?`;
       els.codeConflictPrompt.hidden = false;
@@ -2433,6 +2489,7 @@
     const { resolve } = state.codeConflict;
     state.codeConflict = null;
     els.codeConflictPrompt.hidden = true;
+    if (choice !== null) startImportProgress("Finishing schedule import…");
     resolve(choice);
   }
 
@@ -2442,6 +2499,7 @@
     state.isParsing = true;
     updateScheduleModal();
     codeStatus(els.importCodeStatus, "Opening the code on this device…");
+    startImportProgress("Opening the code on this device…");
     try {
       const imported = await window.WhosFreeShareCode.decode(els.importCodeInput.value);
       validateData(imported);
@@ -2460,7 +2518,7 @@
       codeStatus(els.importCodeStatus, warning || `Imported ${result.added} schedule${result.added === 1 ? "" : "s"}. Skipped ${result.skipped} identical schedules.${choicesNote}${renameNote}`, warning ? "error" : "success");
     } catch (error) {
       codeStatus(els.importCodeStatus, error.message || "The code could not be imported.", "error");
-    } finally { finishCodeConflict(null); state.isParsing = false; updateScheduleModal(); els.decodeCodeButton.focus({ preventScroll: true }); }
+    } finally { finishCodeConflict(null); state.isParsing = false; updateScheduleModal(); endImportProgress(els.decodeCodeButton); els.decodeCodeButton.focus({ preventScroll: true }); }
   }
 
   async function handleLocalScheduleFile(event) {
@@ -2470,6 +2528,7 @@
     const hadData = state.hasData;
     state.isParsing = true;
     updateScheduleModal();
+    startImportProgress(`Reading ${file.name}…`);
 
     try {
       const text = await file.text();
@@ -2522,6 +2581,7 @@
       state.isParsing = false;
       updateScheduleModal();
       event.target.value = "";
+      endImportProgress();
     }
   }
 
@@ -3188,6 +3248,15 @@
   function bindEvents() {
     bindReviewGridScrolling();
     document.addEventListener("click", event => {
+      if (state.importProgress && !els.importProgressOverlay.contains(event.target)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+    document.addEventListener("focusin", event => {
+      if (state.importProgress && !els.importProgressOverlay.contains(event.target)) els.importProgressOverlay.focus({ preventScroll: true });
+    });
+    document.addEventListener("click", event => {
       for (const menu of els.peopleList.querySelectorAll(".group-options[open]")) if (!menu.contains(event.target)) menu.open = false;
     });
     els.lightThemeButton.addEventListener("click", () => {
@@ -3275,6 +3344,13 @@
     });
 
     document.addEventListener("keydown", event => {
+      if (state.importProgress) {
+        if (["Tab", "Escape"].includes(event.key)) {
+          event.preventDefault();
+          els.importProgressOverlay.focus({ preventScroll: true });
+        }
+        return;
+      }
       const groupModal = !els.groupWeekModal.hidden ? els.groupWeekModal : !els.groupsModal.hidden ? els.groupsModal : null;
       if (event.key === "Tab" && groupModal) {
         const focusable = [...groupModal.querySelectorAll('button, input, [tabindex="0"]')].filter(item => !item.disabled && !item.closest("[hidden]"));
@@ -3334,7 +3410,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=39", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=40", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
