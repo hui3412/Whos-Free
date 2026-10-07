@@ -83,22 +83,58 @@
     return match ? `${match[1].padStart(2, "0")}:${match[2]}` : null;
   }
 
+  function fitTimeAxis(points) {
+    const slopes = [];
+    for (let i = 0; i < points.length; i += 1) for (let j = i + 1; j < points.length; j += 1) {
+      const delta = points[j].minute - points[i].minute;
+      if (delta >= 60) slopes.push((points[j].cy - points[i].cy) / delta);
+    }
+    const slope = median(slopes.filter(value => value > 0));
+    const intercept = median(points.map(point => point.cy - point.minute * slope));
+    return { slope, intercept };
+  }
+
+  function halfHourGrid(points, headerBottom) {
+    const groups = new Map();
+    for (const point of points.filter(point => point.minute % 30 === 0)) {
+      if (!groups.has(point.minute)) groups.set(point.minute, []);
+      groups.get(point.minute).push(point);
+    }
+    // Adjacent rows print their shared boundary twice. The midpoint of those
+    // two labels locates the boundary, not two separate start/end phases.
+    const centers = [...groups].map(([minute, labels]) => ({ minute, cy: labels.reduce((sum, label) => sum + label.cy, 0) / labels.length, labels })).sort((a, b) => a.minute - b.minute);
+    const paired = centers.filter(point => point.labels.length >= 2);
+    const { slope, intercept } = fitTimeAxis(paired.length >= 8 ? paired : centers);
+    const valid = centers.filter(point => Math.abs(point.cy - (intercept + point.minute * slope)) < slope * 9);
+    if (!Number.isFinite(slope) || valid.length < 8 || valid.length < centers.length * .65) throw new Error("The time labels are unclear. Try an upright screenshot with the full time column.");
+    const observedFirst = Math.min(...valid.map(point => point.minute));
+    const last = Math.max(...valid.map(point => point.minute));
+    // If OCR misses early labels, the aligned weekday header identifies the
+    // first row of the already validated axis. Never extrapolate a long gap.
+    const headerMinute = Math.round((headerBottom - intercept) / slope / 30) * 30;
+    const first = headerMinute <= observedFirst && observedFirst - headerMinute <= 120 && Math.abs(intercept + headerMinute * slope - headerBottom) <= slope * 10 ? headerMinute : observedFirst;
+    const labels = valid.flatMap(point => point.labels);
+    const height = median(labels.map(point => point.height));
+    const x0 = Math.min(...labels.map(point => point.x0)), x1 = Math.max(...labels.map(point => point.x1));
+    const items = [];
+    const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    for (let minute = first; minute < last; minute += 30) {
+      const top = intercept + minute * slope, bottom = top + slope * 30;
+      items.push({ text: clock(minute), x0, x1, cx: (x0 + x1) / 2, y0: top, y1: top + height, cy: top + height / 2, height });
+      items.push({ text: clock(minute + 30), x0, x1, cx: (x0 + x1) / 2, y0: bottom - height, y1: bottom, cy: bottom - height / 2, height });
+    }
+    return { items, rowHeight: slope * 30, top: intercept + first * slope, bottom: intercept + last * slope, mode: "half-hour" };
+  }
+
   function timeGrid(items, headerBottom) {
     const markers = items.map(item => ({ ...item, time: normalizedTime(item.text) })).filter(item => item.time && item.y0 > headerBottom);
     markers.sort((a, b) => a.cy - b.cy);
     const points = markers.map(item => ({ ...item, minute: Number(item.time.slice(0, 2)) * 60 + Number(item.time.slice(3)) }));
     if (points.length < 8) throw new Error("Could not read enough time labels. Include the time column on the left in a sharper screenshot.");
+    if (points.filter(point => point.minute % 30 === 0).length >= points.length * .75) return halfHourGrid(points, headerBottom);
     // Fit the printed time axis robustly so a missed OCR label cannot shift
     // every subsequent class by a row. Reject inconsistent axes instead.
-    const slopes = [];
-    for (let i = 0; i < points.length; i += 1) {
-      for (let j = i + 1; j < points.length; j += 1) {
-        const delta = points[j].minute - points[i].minute;
-        if (delta >= 60) slopes.push((points[j].cy - points[i].cy) / delta);
-      }
-    }
-    const slope = median(slopes.filter(value => value > 0));
-    const intercept = median(points.map(point => point.cy - point.minute * slope));
+    const { slope, intercept } = fitTimeAxis(points);
     const valid = points.filter(point => Math.abs(point.cy - (intercept + point.minute * slope)) < slope * 5);
     if (!Number.isFinite(slope) || valid.length < 8 || valid.length < points.length * 0.65) throw new Error("The time labels are unclear. Try an upright screenshot with the full time column.");
     const residues = new Map();
@@ -123,10 +159,11 @@
           cx: (x0 + x1) / 2, cy, y0: cy - height / 2, y1: cy + height / 2, height });
       }
     }
-    return { items: result, rowHeight: slope * 30, top: result[0].y0 - slope * 5 };
+    const top = result[0].y0 - slope * 5;
+    return { items: result, rowHeight: slope * 30, top, bottom: top + result.length / 2 * slope * 30, mode: "paired" };
   }
 
-  function borderRows(canvas, column, minimumY) {
+  function borderRows(canvas, column, minimumY, maximumY = canvas.height * BASE_WIDTH / canvas.width) {
     const scale = canvas.width / BASE_WIDTH;
     const left = Math.max(0, Math.round((column.left + column.width * 0.03) * scale));
     const right = Math.min(canvas.width, Math.round((column.right - column.width * 0.03) * scale));
@@ -134,26 +171,32 @@
     const { data } = canvas.getContext("2d").getImageData(left, 0, width, canvas.height);
     const hits = [];
     const offsetY = Math.max(2, Math.ceil(scale * 1.3));
-    for (let y = Math.max(offsetY, Math.floor(minimumY * scale)); y < canvas.height - offsetY; y += 1) {
+    for (let y = Math.max(offsetY, Math.floor(minimumY * scale)); y < Math.min(canvas.height - offsetY, Math.ceil(maximumY * scale) + offsetY); y += 1) {
       let matches = 0;
       const shades = [];
+      const aboveShades = [], belowShades = [];
       for (let x = 0; x < width; x += 2) {
         const offset = (y * width + x) * 4;
         const red = data[offset], green = data[offset + 1], blue = data[offset + 2];
         const gray = (red + green + blue) / 3;
         shades.push(gray);
-        if (Math.max(red, green, blue) - Math.min(red, green, blue) > 12) continue;
         if (gray < 90 || gray > 248) continue;
         const above = ((y - offsetY) * width + x) * 4;
         const below = ((y + offsetY) * width + x) * 4;
-        const neighbor = Math.max((data[above] + data[above + 1] + data[above + 2]) / 3, (data[below] + data[below + 1] + data[below + 2]) / 3);
-        if (neighbor - gray > 3) matches += 1;
+        const aboveGray = (data[above] + data[above + 1] + data[above + 2]) / 3;
+        const belowGray = (data[below] + data[below + 1] + data[below + 2]) / 3;
+        aboveShades.push(aboveGray); belowShades.push(belowGray);
+        const neighbor = Math.max(aboveGray, belowGray);
+        const transition = Math.max(Math.abs(data[above] - data[below]), Math.abs(data[above + 1] - data[below + 1]), Math.abs(data[above + 2] - data[below + 2]));
+        if (neighbor - gray > 3 || transition > 18) matches += 1;
       }
       if (matches / Math.ceil(width / 2) >= 0.72) {
         shades.sort((a, b) => a - b);
+        aboveShades.sort((a, b) => a - b); belowShades.sort((a, b) => a - b);
         // A border has nearly uniform brightness. Dense text and JPEG ringing
         // can cover most of a row too, but have a much wider brightness range.
-        if (shades[Math.floor(shades.length * 0.9)] - shades[Math.floor(shades.length * 0.1)] < 24) hits.push(y / scale);
+        const uniform = values => values[Math.floor(values.length * .9)] - values[Math.floor(values.length * .1)] < 24;
+        if (uniform(shades) && uniform(aboveShades) && uniform(belowShades)) hits.push(y / scale);
       }
     }
     const groups = [];
@@ -168,7 +211,17 @@
   function classRegions(canvas, columns, grid) {
     const rects = [];
     for (const column of columns) {
-      const boundaries = borderRows(canvas, column, grid.top - grid.rowHeight * 0.25);
+      const detected = borderRows(canvas, column, grid.top - grid.rowHeight * 0.25, grid.bottom + grid.rowHeight * .15);
+      // A dense line of course text can resemble a border. Only keep lines
+      // aligned with the validated row lattice, merging nearby JPEG edges.
+      const aligned = new Map();
+      for (const y of detected) {
+        const row = Math.round((y - grid.top) / grid.rowHeight);
+        const expected = grid.top + row * grid.rowHeight;
+        if (row < 0 || expected > grid.bottom + 1 || Math.abs(y - expected) > Math.max(2, grid.rowHeight * .12)) continue;
+        if (!aligned.has(row) || Math.abs(y - expected) < Math.abs(aligned.get(row) - expected)) aligned.set(row, y);
+      }
+      const boundaries = [...aligned.values()].sort((a, b) => a - b);
       if (boundaries.length < 3) throw new Error(`Could not locate the class borders for ${column.day}. Use a screenshot with visible grid lines.`);
       for (let index = 0; index < boundaries.length - 1; index += 1) {
         const y0 = boundaries[index], y1 = boundaries[index + 1];
@@ -177,6 +230,26 @@
       }
     }
     return rects;
+  }
+
+  function isolateTimetable(canvas, columns, grid) {
+    const scale = BASE_WIDTH / canvas.width;
+    const left = Math.max(0, Math.floor((grid.items[0].x0 - columns[0].width * .35) / scale));
+    const right = Math.min(canvas.width, Math.ceil(columns.at(-1).right / scale));
+    const top = Math.max(0, Math.floor((Math.min(...columns.map(column => column.header.y0)) - 5) / scale));
+    const bottom = Math.min(canvas.height, Math.ceil((grid.bottom + grid.rowHeight * .15) / scale));
+    const cropped = document.createElement("canvas");
+    cropped.width = right - left;
+    cropped.height = bottom - top;
+    cropped.getContext("2d", { willReadFrequently: true }).drawImage(canvas, left, top, cropped.width, cropped.height, 0, 0, cropped.width, cropped.height);
+    const factor = canvas.width / cropped.width;
+    const x = value => (value - left * scale) * factor;
+    const y = value => (value - top * scale) * factor;
+    const box = item => ({ ...item, x0: x(item.x0), x1: x(item.x1), y0: y(item.y0), y1: y(item.y1), cx: x(item.cx), cy: y(item.cy), height: item.height * factor });
+    return { canvas: cropped,
+      columns: columns.map(column => ({ ...column, left: x(column.left), right: x(column.right), center: x(column.center), width: column.width * factor, header: box(column.header) })),
+      grid: { ...grid, items: grid.items.map(box), rowHeight: grid.rowHeight * factor, top: y(grid.top), bottom: y(grid.bottom) },
+    };
   }
 
   function containsInk(canvas, rectangle) {
@@ -201,6 +274,7 @@
     const Tesseract = await loadOcr();
     const base = new URL("assets/ocr/", document.baseURI);
     let worker;
+    let croppedCanvas;
     let stage = "Reading the timetable";
     let bootTimer;
     let bootFailed = false;
@@ -220,10 +294,10 @@
       worker = await Promise.race([creation, bootFailure]);
       clearTimeout(bootTimer);
       await worker.setParameters({ tessedit_pageseg_mode: "11", user_defined_dpi: "300" });
-      const scale = BASE_WIDTH / canvas.width;
+      let scale = BASE_WIDTH / canvas.width;
       const full = await worker.recognize(canvas, {}, { blocks: true, text: true });
       const fullItems = wordsFromData(full.data, scale);
-      const columns = headersFromItems(fullItems);
+      let columns = headersFromItems(fullItems);
       const headerBottom = Math.max(...columns.map(column => column.header.y1));
       stage = "Reading the time column";
       let grid;
@@ -231,13 +305,20 @@
         grid = timeGrid(fullItems.filter(item => item.x1 <= columns[0].left + 2), headerBottom);
       } catch {
         // Leave enough room for the final digit: header text can be off-center.
+        await worker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "0123456789:." });
         const gutter = await worker.recognize(canvas, { rectangle: { left: 0, top: Math.max(0, Math.floor(headerBottom / scale)), width: Math.floor((columns[0].left + 3) / scale), height: canvas.height - Math.floor(headerBottom / scale) } }, { blocks: true });
         grid = timeGrid(wordsFromData(gutter.data, scale).filter(item => item.x1 <= columns[0].left + 3), headerBottom);
       }
+      status("Isolating the timetable from the rest of the picture…");
+      const isolated = isolateTimetable(canvas, columns, grid);
+      canvas = croppedCanvas = isolated.canvas;
+      columns = isolated.columns;
+      grid = isolated.grid;
+      scale = BASE_WIDTH / canvas.width;
       const rects = classRegions(canvas, columns, grid).filter(rect => containsInk(canvas, rect));
       const items = [...columns.map(column => ({ ...column.header, text: column.day })), ...grid.items];
       const recognizedCells = [];
-      await worker.setParameters({ tessedit_pageseg_mode: "6" });
+      await worker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "" });
       let recognized = 0;
       for (const rect of rects) {
         stage = `Reading class ${++recognized} of ${rects.length}`;
@@ -279,6 +360,7 @@
       bootFailed = true;
       clearTimeout(bootTimer);
       await worker?.terminate();
+      if (croppedCanvas) croppedCanvas.width = croppedCanvas.height = 1;
     }
   }
 
@@ -321,5 +403,6 @@
     finally { canvas.width = canvas.height = 1; }
   }
 
-  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { timeGrid, borderRows, headersFromItems, classesFromCells } };
+  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { timeGrid, borderRows, headersFromItems, classesFromCells, classRegions, containsInk, isolateTimetable } };
 })();
+

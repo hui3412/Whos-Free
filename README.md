@@ -11,7 +11,7 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 ### Summary
 
 - **Cleaner design:** Subtle filled backgrounds, compact mobile controls and automatic scrolling to newly opened panels.
-- **Image recognition:** On-device English/French OCR for timetable screenshots, with warnings for uncertain detections.
+- **Image recognition:** On-device English/French OCR for timetable screenshots, including repeated half-hour boundary labels and coloured class blocks, with warnings for uncertain detections.
 - **Timetable editor:** Create schedules manually or correct imported and saved schedules in a seven-day grid.
 - **Availability:** Check now or preview another time, including weekends, with real breaks and next-class details.
 - **Groups:** Overlapping memberships, live free counts, shared-break suggestions and weekly availability.
@@ -35,7 +35,7 @@ October 2, 2026
 - Added next-real-break times to person cards.
 - Bundled and cached OCR files for later offline use on supported browsers.
 
-Use an upright picture cropped around the full timetable, retaining borders, times and headings. Review recognized times before saving; image-only PDFs should use the picture importer. Deploy the root app files and complete `assets/ocr/` folder over HTTPS or `http://localhost`. Offline recognition requires cached OCR files and retained browser storage.
+Use a clear, upright picture with the full timetable, borders, times and weekday headings visible. Uncropped screenshots are supported: after locating the time axis and weekday columns, the detector automatically isolates the timetable before reading classes, excluding surrounding page content. Manual cropping can still help when the timetable is too small or blurry. Review recognized times and text before saving; image-only PDFs should use the picture importer. Deploy the root app files and complete `assets/ocr/` folder over HTTPS or `http://localhost`. Offline recognition requires cached OCR files and retained browser storage.
 
 ### Version 12.2 — Sharing, groups and schedule Undo
 
@@ -286,3 +286,4 @@ The **Share schedules.json** button shares/downloads only the schedule database.
   - Time text accepts both `08:15` and French-style `08 h 15`, including ranges using `à`.
 - Shared `schedules.json` files now carry the Who's Free? website URL (`https://xander444.github.io/Whos-Free/`).
 - On devices with the Web Share API, the share sheet includes the website link alongside the JSON file.
+
