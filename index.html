@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=44">
+  <link rel="stylesheet" href="styles.css?v=45">
 </head>
 <body>
   <div class="app-shell">
@@ -383,15 +383,20 @@
       <h2 id="importProgressTitle">Importing schedules</h2>
       <p id="importProgressMessage" role="status" aria-live="polite" aria-atomic="true"></p>
       <p class="import-progress-note">Please wait until the import finishes.</p>
+      <form id="importPictureNameForm" class="import-picture-name" hidden>
+        <label class="field-group"><span>While you wait, name this schedule</span><input id="importPictureName" type="text" maxlength="120" autocomplete="off" enterkeyhint="done" aria-describedby="importPictureNameHelp" placeholder="Person's name"></label>
+        <p id="importPictureNameHelp" class="import-progress-note">Your name will carry over. If you're typing when loading finishes, we'll wait for you.</p>
+        <button id="finishImportPictureName" class="secondary-button" type="submit">Done entering name</button>
+      </form>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=44" defer></script>
-  <script src="schedule-image-parser.js?v=44" defer></script>
-  <script src="schedule-availability.js?v=44" defer></script>
-  <script src="schedule-share-code.js?v=44" defer></script>
-  <script src="schedule-groups.js?v=44" defer></script>
-  <script src="app.js?v=44" defer></script>
+  <script src="schedule-parser.js?v=45" defer></script>
+  <script src="schedule-image-parser.js?v=45" defer></script>
+  <script src="schedule-availability.js?v=45" defer></script>
+  <script src="schedule-share-code.js?v=45" defer></script>
+  <script src="schedule-groups.js?v=45" defer></script>
+  <script src="app.js?v=45" defer></script>
 </body>
 </html>

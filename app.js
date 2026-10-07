@@ -102,6 +102,10 @@
     parserStatus: document.getElementById("parserStatus"),
     importProgressOverlay: document.getElementById("importProgressOverlay"),
     importProgressMessage: document.getElementById("importProgressMessage"),
+    importPictureNameForm: document.getElementById("importPictureNameForm"),
+    importPictureName: document.getElementById("importPictureName"),
+    importPictureNameHelp: document.getElementById("importPictureNameHelp"),
+    finishImportPictureName: document.getElementById("finishImportPictureName"),
     importSchedulesButton: document.getElementById("importSchedulesButton"),
     shareSchedulesButton: document.getElementById("shareSchedulesButton"),
     exportSchedulesButton: document.getElementById("exportSchedulesButton"),
@@ -1733,16 +1737,25 @@
     els.scheduleImageInput.click();
   }
 
-  function startImportProgress(message) {
+  function startImportProgress(message, pictureName = false) {
     if (state.importProgress) { updateImportProgress(message); return; }
     const overlay = els.importProgressOverlay;
     state.importProgress = {
+      pictureName: pictureName ? { started: false, edited: false, confirmed: false, composing: false, ready: false, resolve: null } : null,
+      focusWithin: overlay,
       focusReturn: document.activeElement,
       bodyOverflow: document.body.style.overflow,
       hadDialog: [...document.querySelectorAll(".modal-backdrop")].some(element => element !== overlay && !element.hidden),
       background: [...document.body.children].filter(element => element !== overlay && !["SCRIPT", "TEMPLATE"].includes(element.tagName)).map(element => ({ element, inert: element.hasAttribute("inert"), ariaHidden: element.getAttribute("aria-hidden") })),
     };
     els.importProgressMessage.textContent = message;
+    els.importPictureNameForm.hidden = !pictureName;
+    els.importPictureName.value = "";
+    els.finishImportPictureName.disabled = false;
+    els.finishImportPictureName.textContent = "Done entering name";
+    els.importPictureNameHelp.textContent = "Your name will carry over. If you're typing when loading finishes, we'll wait for you.";
+    overlay.querySelector(".import-progress-spinner").hidden = false;
+    overlay.querySelector(".import-progress-note").textContent = "Please wait until the import finishes.";
     overlay.hidden = false;
     document.body.style.overflow = "hidden";
     overlay.focus({ preventScroll: true });
@@ -1756,11 +1769,52 @@
     if (state.importProgress) els.importProgressMessage.textContent = message;
   }
 
+  function editImportPictureName(edited = false) {
+    const name = state.importProgress?.pictureName;
+    if (!name) return;
+    name.started = true;
+    name.edited ||= edited;
+    name.confirmed = false;
+    els.finishImportPictureName.disabled = false;
+    if (!name.ready) els.importPictureNameHelp.textContent = "Your name will carry over. If you're typing when loading finishes, we'll wait for you.";
+  }
+
+  function finishImportPictureName(event) {
+    event.preventDefault();
+    const name = state.importProgress?.pictureName;
+    if (!name || name.composing) return;
+    name.confirmed = true;
+    if (name.resolve) {
+      const resolve = name.resolve;
+      name.resolve = null;
+      resolve();
+    } else {
+      els.importPictureName.blur();
+      els.finishImportPictureName.disabled = true;
+      els.importPictureNameHelp.textContent = "Name ready. You can still change it while the picture loads.";
+    }
+  }
+
+  async function waitForImportPictureName(detectedName) {
+    const name = state.importProgress.pictureName;
+    name.ready = true;
+    if (name.started && !name.confirmed) {
+      els.importProgressOverlay.querySelector(".import-progress-spinner").hidden = true;
+      els.importProgressOverlay.querySelector(".import-progress-note").textContent = "Ready to review once you're done naming.";
+      updateImportProgress("Your schedule is ready.");
+      els.importPictureNameHelp.textContent = "Finish entering the name, then press Continue to see the schedule.";
+      els.finishImportPictureName.textContent = "Continue";
+      await new Promise(resolve => { name.resolve = resolve; });
+    }
+    return name.edited ? els.importPictureName.value.trim() : detectedName || "";
+  }
+
   function endImportProgress(focusTarget = null) {
     const operation = state.importProgress;
     if (!operation) return;
     state.importProgress = null;
     els.importProgressOverlay.hidden = true;
+    els.importPictureNameForm.hidden = true;
     for (const { element, inert, ariaHidden } of operation.background) {
       if (!inert) element.removeAttribute("inert");
       if (ariaHidden === null) element.removeAttribute("aria-hidden");
@@ -1985,14 +2039,15 @@
     state.isParsing = true;
     updateScheduleModal();
     setImageStatus("Reading the picture on this device…");
-    startImportProgress("Reading the picture on this device…");
+    startImportProgress("Reading the picture on this device…", true);
     try {
       const result = await window.WhosFreeImageParser.parseScheduleImage(file, { onProgress: message => setImageStatus(message) });
+      const name = await waitForImportPictureName(result.name);
       state.pendingImage = { ...result, isPicture: true };
       state.imagePreviewUrl = URL.createObjectURL(file);
       els.imageReviewPreview.src = state.imagePreviewUrl;
       els.imageReviewPreview.closest("details").hidden = false;
-      els.imageReviewName.value = result.name || "";
+      els.imageReviewName.value = name;
       setReviewSemester(result.person.semester, true);
       els.imageReviewClasses.replaceChildren();
       result.person.classes.forEach(item => addReviewClass(item, false));
@@ -3331,8 +3386,23 @@
       }
     }, true);
     document.addEventListener("focusin", event => {
-      if (state.importProgress && !els.importProgressOverlay.contains(event.target)) els.importProgressOverlay.focus({ preventScroll: true });
+      if (!state.importProgress) return;
+      if (els.importProgressOverlay.contains(event.target)) state.importProgress.focusWithin = event.target;
+      else {
+        const target = state.importProgress.focusWithin;
+        (target && !target.disabled && !target.closest("[hidden]") ? target : els.importProgressOverlay).focus({ preventScroll: true });
+      }
     });
+    els.importPictureName.addEventListener("focus", () => editImportPictureName());
+    els.importPictureName.addEventListener("input", () => editImportPictureName(true));
+    els.importPictureName.addEventListener("compositionstart", () => {
+      editImportPictureName();
+      if (state.importProgress?.pictureName) state.importProgress.pictureName.composing = true;
+    });
+    els.importPictureName.addEventListener("compositionend", () => {
+      if (state.importProgress?.pictureName) state.importProgress.pictureName.composing = false;
+    });
+    els.importPictureNameForm.addEventListener("submit", finishImportPictureName);
     document.addEventListener("click", event => {
       for (const menu of els.peopleList.querySelectorAll(".group-options[open]")) if (!menu.contains(event.target)) menu.open = false;
     });
@@ -3425,10 +3495,14 @@
 
     document.addEventListener("keydown", event => {
       if (state.importProgress) {
-        if (["Tab", "Escape"].includes(event.key)) {
+        if (event.key === "Tab") {
+          const focusable = [...els.importProgressOverlay.querySelectorAll('input, button')].filter(item => !item.disabled && !item.closest("[hidden]"));
+          const index = focusable.indexOf(document.activeElement);
           event.preventDefault();
-          els.importProgressOverlay.focus({ preventScroll: true });
+          const next = index === -1 ? event.shiftKey ? focusable.at(-1) : focusable[0] : focusable[(index + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length];
+          (next || els.importProgressOverlay).focus({ preventScroll: true });
         }
+        if (event.key === "Escape") event.preventDefault();
         return;
       }
       const groupModal = !els.groupWeekModal.hidden ? els.groupWeekModal : !els.groupsModal.hidden ? els.groupsModal : null;
@@ -3496,7 +3570,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=44", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=45", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

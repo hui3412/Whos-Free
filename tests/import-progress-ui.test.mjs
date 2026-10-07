@@ -65,8 +65,11 @@ test("picture import centers live progress, blocks background controls and keybo
       assert.ok(event.defaultPrevented);
     }
     a.el("settingsButton").focus();
-    assert.equal(a.window.document.activeElement, a.overlay);
+    assert.equal(a.window.document.activeElement.id, "importPictureName");
     pending.resolve({ name: "Student", person: schedule });
+    await a.tick();
+    assert.equal(a.overlay.hidden, false, "focusing the name field keeps review from interrupting typing");
+    a.el("finishImportPictureName").click();
     await a.tick();
     a.unlocked();
     assert.equal(a.el("imageReview").hidden, false);
