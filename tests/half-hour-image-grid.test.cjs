@@ -153,8 +153,8 @@ test("automatic crop excludes surrounding page and rebases coordinates without c
   assert.equal(grid.top, 100);
 });
 
-for (const failCell of [false, true]) {
-  test(`cropped per-cell OCR resets the gutter whitelist and releases resources on ${failCell ? "failure" : "success"}`, async () => {
+for (const headerRetry of [false, true]) for (const failCell of [false, true]) {
+  test(`${headerRetry ? "focused heading retry then " : ""}cropped per-cell OCR resets the gutter whitelist and releases resources on ${failCell ? "failure" : "success"}`, async () => {
     let cropped, terminated = false;
     const headers = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((text, index) => word(text, 160 + index * 100, 80, 200 + index * 100, 94));
     const calls = [], parameters = [];
@@ -176,8 +176,9 @@ for (const failCell of [false, true]) {
       async setParameters(value) { parameters.push(value); },
       async recognize(canvas, options) {
         calls.push({ canvas, options });
-        if (calls.length === 1) return data(headers); // Force the time-column retry.
-        if (calls.length === 2) return data(markers());
+        if (calls.length === 1) return data(headerRetry ? headers.filter((_, i) => i === 0 || i === 4) : headers); // Force the time-column retry.
+        if (headerRetry && calls.length === 2) return data(headers.filter((_, i) => i !== 2)); // One internal header remains unreadable.
+        if (calls.length === (headerRetry ? 3 : 2)) return data(markers());
         if (failCell) throw new Error("cell OCR failed");
         const { left, top } = options.rectangle;
         const scale = 705 / canvas.width;
@@ -193,11 +194,17 @@ for (const failCell of [false, true]) {
       assert.equal(result.person.classes[0].start, "08:00");
       assert.equal(result.person.classes[0].end, "08:30");
     }
-    assert.equal(parameters[1].tessedit_char_whitelist, "0123456789:.");
-    assert.equal(parameters[2].tessedit_char_whitelist, "");
+    const offset = headerRetry ? 1 : 0;
+    if (headerRetry) {
+      assert.equal(parameters[1].tessedit_pageseg_mode, "7");
+      const band = calls[1].options.rectangle;
+      assert.ok(band.left > 0 && band.top > 0 && band.width > 0 && band.height > 0);
+    }
+    assert.equal(parameters[1 + offset].tessedit_char_whitelist, "0123456789:.");
+    assert.equal(parameters[2 + offset].tessedit_char_whitelist, "");
     assert.equal(calls[0].canvas, original);
     assert.equal(calls[1].canvas, original);
-    assert.equal(calls[2].canvas, cropped);
+    assert.equal(calls[2 + offset].canvas, cropped);
     assert.equal(terminated, true);
     assert.equal(cropped.width, 1);
     assert.equal(cropped.height, 1);
