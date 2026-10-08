@@ -22,6 +22,16 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
 
+### Version 60 — Compact homepage and settings
+
+October 8, 2026
+
+- Added a responsive masthead with a calendar mark and compact navigation.
+- Settings use collapsible sections; the friends list and individual nickname editors stay tucked away until opened.
+- Replaced large theme cards with compact color swatches and a light/dark segmented control.
+- Shortened descriptions throughout schedule import, sharing and groups while retaining privacy and export limitations.
+- Verification was omitted for this UI update at the user's request.
+
 ### Version 59 — Smaller schedule sharing codes
 
 October 8, 2026
