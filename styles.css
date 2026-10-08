@@ -2579,41 +2579,7 @@ button:disabled { cursor: not-allowed; }
   #useCurrentSemesterButton { grid-column: 1 / -1; }
 }
 
-/* A compact masthead and native disclosures keep the main controls in reach. */
-.app-header.masthead {
-  position: relative;
-  align-items: flex-end;
-  gap: 24px;
-  padding: 24px;
-  margin-bottom: 20px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: linear-gradient(120deg, var(--panel), color-mix(in srgb, var(--accent) 7%, var(--panel)));
-}
-.masthead .brand-copy { min-width: 0; }
-.masthead .brand-copy > .masthead-kicker {
-  margin: 0 0 12px;
-  color: var(--muted);
-  font-size: .66rem;
-  font-weight: 650;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-.masthead .brand-row { gap: 12px; }
-.masthead .brand-copy h1 {
-  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
-  font-weight: 550;
-  line-height: 1.12;
-  letter-spacing: -.045em;
-}
-.brand-mark { flex: 0 0 40px; width: 40px; height: 40px; }
-.brand-mark > rect:first-child { fill: var(--accent-soft); stroke: var(--border); }
-.brand-mark path { fill: none; stroke: var(--text); stroke-width: 2; stroke-linecap: round; }
-.brand-mark .brand-mark-slot { fill: var(--accent); }
-.masthead .brand-copy > .masthead-description { margin-top: 10px; font-size: .88rem; }
-.masthead .header-actions { flex-shrink: 0; }
-.masthead .header-data-button { min-height: 44px; }
-
+/* Native disclosures keep settings compact. */
 .settings-modal .settings-disclosure {
   margin-top: 0;
   border-bottom: 1px solid var(--border);
@@ -2717,13 +2683,4 @@ button:disabled { cursor: not-allowed; }
 .appearance-settings-section .theme-swatch.mint { background: #40d99a; }
 .appearance-settings-section .theme-swatch.orange { background: #ff9f43; }
 
-@media (max-width: 750px) {
-  .app-header.masthead { flex-wrap: wrap; gap: 18px; padding: 20px; }
-  .masthead .brand-copy { flex: 1 1 100%; }
-  .masthead .header-actions { width: 100%; flex-wrap: wrap; }
-}
-@media (max-width: 400px) {
-  .app-header.masthead { padding: 16px; }
-  .masthead .header-actions { gap: 6px; }
-  .masthead .header-data-button { gap: 5px; padding: 0 10px; font-size: .77rem; }
-}
+.settings-credit { margin: 20px 0 0; padding-top: 0; text-align: center; line-height: 1.5; font-weight: 400; }
