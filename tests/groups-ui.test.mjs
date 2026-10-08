@@ -32,14 +32,16 @@ async function app(groups = null, schedules = data) {
   const prefs = () => JSON.parse(window.localStorage.getItem("whos-free-groups-v1"));
   const cards = () => [...el("peopleList").querySelectorAll(".person-name")].map(item => item.textContent.replace(" 📌", ""));
   const manage = () => {
-    if (el("scheduleModal").hidden) el("scheduleDataButton").click();
+    if (el("manageGroupsButton").hidden) el("showGroupsToggle").click();
+    el("manageGroupsButton").focus();
     el("manageGroupsButton").click();
     assert.equal(el("scheduleModal").hidden, true);
+    assert.equal(el("groupsModal").hidden, false);
   };
   const finish = () => {
     el("closeGroupsModal").click();
-    assert.equal(el("scheduleModal").hidden, false, "group manager returns to Schedules");
-    el("closeScheduleModal").click();
+    assert.equal(el("scheduleModal").hidden, true, "group manager returns to the main page");
+    assert.equal(window.document.activeElement, el("manageGroupsButton"));
   };
   return { window, el, tick, create, prefs, cards, manage, finish };
 }
@@ -105,6 +107,7 @@ test("group edits, saved visibility, empty groups and deleted people do not eras
   const saved = { showGroups: true, hideUngrouped: true, groups: [{ id: "one", name: "Lunch", members: ["Alice", "Bob", "Gone"], hidden: false }, { id: "two", name: "Club", members: ["Bob"], hidden: true }] };
   const a = await app(saved); const { window, el, prefs, tick, manage, finish } = a;
   try {
+    assert.equal(el("manageGroupsButton").hidden, false, "saved group view restores Manage");
     assert.deepEqual(prefs().groups[0].members, ["Alice", "Bob"]);
     assert.ok(window.document.querySelector('[aria-label="Show group Club"]'));
     assert.ok(window.document.querySelector('[aria-label="Show group Ungrouped people"]'));
@@ -143,7 +146,7 @@ test("group dialog validates duplicate names, saves safely and traps keyboard fo
   } finally { await window.happyDOM.abort(); }
 });
 
-test("main view toggles are compact neighbors and group management is inside Schedules", async () => {
+test("Manage sits beside the main group toggle and appears only in group view", async () => {
   const { window, el, manage, finish, create } = await app();
   try {
     assert.equal(el("showGroupsToggle").parentElement, el("viewToggleButton").parentElement);
@@ -151,16 +154,22 @@ test("main view toggles are compact neighbors and group management is inside Sch
       assert.ok(el(id).querySelector('svg[aria-hidden="true"]'));
       assert.ok(el(id).getAttribute("aria-label"));
     }
-    assert.ok(el("scheduleModal").contains(el("manageGroupsButton")));
+    assert.equal(el("scheduleModal").contains(el("manageGroupsButton")), false);
+    assert.equal(el("showGroupsToggle").nextElementSibling, el("manageGroupsButton"));
+    assert.equal(el("manageGroupsButton").textContent, "Manage");
+    assert.equal(el("manageGroupsButton").hidden, true);
     assert.equal(el("groupVisibility"), null);
     assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle"));
     assert.equal(el("viewToggleButton").querySelector("[data-mode-label]").textContent, "Free");
     manage(); create("Lunch", ["Alice", "Bob"]); finish();
+    assert.equal(el("manageGroupsButton").hidden, false);
     assert.ok(el("peopleList").querySelector(".people-group"));
     el("showGroupsToggle").click();
+    assert.equal(el("manageGroupsButton").hidden, true);
     assert.equal(el("peopleList").querySelector(".people-group"), null);
     assert.equal(el("groupWeekModal").querySelector("#editGroupFromWeekButton"), null);
     el("showGroupsToggle").click(); assert.equal(el("showGroupsToggle").title, "Hide groups");
+    assert.equal(el("manageGroupsButton").hidden, false);
     assert.ok(el("showGroupsToggle").querySelector("svg"), "toggling must keep the icon");
     el("viewToggleButton").click(); assert.equal(el("viewToggleButton").title, "Show everyone");
     assert.equal(el("viewToggleButton").querySelector("[data-mode-label]").textContent, "All");
@@ -265,3 +274,4 @@ test("renaming a saved person updates every group and keeps the pin", async () =
     assert.deepEqual(JSON.parse(window.localStorage.getItem("whos-free-people-preferences-v1")).pinnedPeople, ["Robert"]);
   } finally { await window.happyDOM.abort(); }
 });
+

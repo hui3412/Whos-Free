@@ -1273,6 +1273,7 @@
   function updateGroupToolbar() {
     els.showGroupsToggle.disabled = !state.hasData;
     const busy = state.isParsing || Boolean(state.pendingImage) || Boolean(state.codeMode);
+    els.manageGroupsButton.hidden = !state.showGroups;
     els.manageGroupsButton.disabled = !state.hasData || busy;
     setViewToggle(els.showGroupsToggle, state.showGroups ? "Hide groups" : "Show groups", state.showGroups);
   }
@@ -3623,7 +3624,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=54", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=55", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

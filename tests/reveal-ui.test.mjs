@@ -52,6 +52,8 @@ for (const reducedMotion of [true, false]) {
       await tick();
       assert.equal(window.document.activeElement, el("importCodeInput"));
       el("closeImportButton").click();
+      el("closeScheduleModal").click();
+      el("showGroupsToggle").click();
       el("manageGroupsButton").click();
       el("newGroupButton").click();
       await tick();
@@ -79,3 +81,4 @@ test("closing a newly revealed editor before the next frame cancels its pending 
     assert.notEqual(window.document.activeElement.id, "imageReviewName");
   } finally { await window.happyDOM.abort(); }
 });
+
