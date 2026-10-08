@@ -11,7 +11,7 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 ### Summary
 
 - **Cleaner design:** Subtle filled backgrounds, compact mobile controls and automatic scrolling to newly opened panels.
-- **Image recognition:** On-device English/French OCR for timetable screenshots, including repeated half-hour boundary labels and coloured class blocks, with warnings for uncertain detections.
+- **Image recognition:** On-device English/French OCR for timetable screenshots, including repeated half-hour boundary labels, hourly start/end rows, abbreviated dated weekday headings and coloured class blocks, with warnings for uncertain detections.
 - **Timetable editor:** Create schedules manually or correct imported and saved schedules in a seven-day grid.
 - **Availability:** Check now or preview another time, including weekends, with real breaks and next-class details.
 - **Groups:** Overlapping memberships, live free counts, shared-break suggestions and weekly availability.
@@ -21,6 +21,17 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 - **Semester labels:** Identify older timetables and update their term without changing classes.
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
+
+### Version 48 — Public Omnivox timetable regression coverage
+
+- Tested five distinct public Omnivox timetables from LaSalle/LCI guides, Sainte-Foy and Trois-Rivières, across nine image variants. Eight variants reproduced all visible busy intervals. The remaining tiny, annotated guide-page screenshot still fails with a clear error; its original embedded timetable image works.
+- Added abbreviated English/French weekday and date-heading recognition, a focused heading retry, and conservative recovery of one unreadable internal weekday when four aligned headings including Monday and Friday remain visible.
+- Recognize hourly start/end rows such as 08:00–08:50 without doubling the time scale. Preserve irregular final rows such as 16:55–17:45 and their local physical boundaries.
+- Avoid false busy blocks caused by dark column edges while accepting faint gray course text. Numbered schedule-configuration grids are not treated as ordinary timetable screenshots.
+- Regression fixtures contain only weekday/time labels and OCR coordinates, not public schedule pictures, student identities, or course text. The four supplied cropped and uncropped half-hour examples remain covered.
+- These checks cover busy times, not perfect transcription. Small, blurry or annotated pictures can still fail or produce uncertain wording; always compare the review grid with the picture before saving. OCR remains on-device.
+
+Public sources: [LaSalle English guide](https://dam.lcieducation.com/1fizm6CngLhkF2on733ugFS68_sODU5MDI0NDlhMGRjNDFm/Guide_utilisation_Omnivox_EN.pdf), [LaSalle French guide](https://cdn.lcieducation.com/-/media/files/montreal/students-resources/guide_utilisation_omnivox_fr.pdf), [LCI Melbourne guide](https://cdn.lcieducation.com/-/media/files/melbourne/omnivox-guide/omnivox-lci-melbourne-guide.pdf%3Fla=en&rev=fa082abc9ea74c6b8ef929d7e8a486b9), [Sainte-Foy printable example](https://www.fichier-pdf.fr/2012/01/16/omnivox-cegep-de-sainte-foy/), and [Trois-Rivières timetable examples](https://www.cegeptr.qc.ca/horaire/).
 
 ### Version 12.1 — Image recognition and timetable editing
 

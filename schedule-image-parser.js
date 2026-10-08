@@ -2,7 +2,7 @@
   "use strict";
 
   const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const ALIASES = [["monday", "lundi"], ["tuesday", "mardi"], ["wednesday", "mercredi"], ["thursday", "jeudi"], ["friday", "vendredi"], ["saturday", "samedi"], ["sunday", "dimanche"]];
+  const ALIASES = [["monday", "mon", "lundi", "lun"], ["tuesday", "tue", "tues", "mardi", "mar"], ["wednesday", "wed", "mercredi", "mer"], ["thursday", "thu", "thur", "thurs", "jeudi", "jeu"], ["friday", "fri", "vendredi", "ven"], ["saturday", "sat", "samedi", "sam"], ["sunday", "sun", "dimanche", "dim"]];
   const BASE_WIDTH = 705;
   let libraryPromise;
 
@@ -50,9 +50,22 @@
       for (const paragraph of block.paragraphs || []) {
         for (const line of paragraph.lines || []) {
           for (const word of line.words || []) {
-            const text = String(word.text || "").trim();
+            let text = String(word.text || "").trim();
             if (!text) continue;
-            const { x0, y0, x1, y1 } = word.bbox;
+            let { x0, y0, x1, y1 } = word.bbox;
+            const leading = text.match(/^[^a-z]+/i)?.[0] || "";
+            const clean = text.slice(leading.length);
+            const token = clean.toLowerCase().match(/^[a-z]+/)?.[0];
+            // Coloured guide annotations can be joined to a weekday word.
+            // Symbol boxes let us discard that leading noise, not guess text.
+            if (leading && ALIASES.some(aliases => aliases.includes(token)) && word.symbols?.length >= text.length) {
+              const symbols = word.symbols.slice(leading.length);
+              text = clean;
+              x0 = Math.min(...symbols.map(symbol => symbol.bbox.x0));
+              x1 = Math.max(...symbols.map(symbol => symbol.bbox.x1));
+              y0 = Math.min(...symbols.map(symbol => symbol.bbox.y0));
+              y1 = Math.max(...symbols.map(symbol => symbol.bbox.y1));
+            }
             items.push({ text, x0: x0 * scale, x1: x1 * scale, y0: y0 * scale, y1: y1 * scale,
               cx: (x0 + x1) * scale / 2, cy: (y0 + y1) * scale / 2, height: (y1 - y0) * scale,
               confidence: word.confidence });
@@ -68,12 +81,57 @@
     return sorted[Math.floor(sorted.length / 2)];
   }
 
-  function headersFromItems(items) {
-    const matches = ALIASES.map(aliases => items.filter(item => aliases.includes(item.text.toLowerCase().replace(/[^a-z]/g, ""))).sort((a, b) => a.cy - b.cy)[0]);
-    if (matches.slice(0, 5).some(header => !header)) throw new Error("Could not read all five weekday headings. Use a clear, upright screenshot with the entire timetable visible.");
+  function headerRow(items) {
+    const candidates = items.flatMap(item => {
+      const token = item.text.toLowerCase().replace(/^[^a-z]+/, "").match(/^[a-z]+(?=$|[^a-z])/)?.[0];
+      const day = ALIASES.findIndex(aliases => aliases.includes(token));
+      return day < 0 ? [] : [{ ...item, day }];
+    });
+    // Do not let an isolated "mon" in French prose or a weekday mentioned
+    // elsewhere on the page displace the aligned timetable header row.
+    const rows = candidates.map(anchor => {
+      const aligned = candidates.filter(item => Math.abs(item.cy - anchor.cy) <= Math.max(3, anchor.height || 0, item.height || 0) * .8);
+      const matches = ALIASES.map((_, day) => aligned.filter(item => item.day === day).sort((a, b) => a.cx - b.cx)[0]);
+      return { matches, count: matches.slice(0, 5).filter(Boolean).length, cy: anchor.cy };
+    });
+    rows.sort((a, b) => b.count - a.count || a.cy - b.cy);
+    return rows[0]?.matches || [];
+  }
+
+  function headersFromItems(items, { recoverMissing = false } = {}) {
+    let matches = headerRow(items);
+    const known = matches.slice(0, 5).filter(Boolean);
+    const canRecover = recoverMissing && known.length === 4 && matches[0] && matches[4];
+    if (known.length < 5 && !canRecover) throw new Error("Could not read all five weekday headings. Use a clear, upright screenshot with the entire timetable visible.");
+    const spacing = values => {
+      const present = values.flatMap((item, index) => item ? [{ item, index }] : []);
+      return median(present.flatMap((value, index) => present.slice(index + 1).map(next => (next.item.cx - value.item.cx) / (next.index - value.index))));
+    };
+    const roughWidth = spacing(matches);
+    // Weekly headings include dates ("Mon. Jan 8", "Lun. 12 févr.").
+    // Use the complete heading, not the left-aligned weekday token alone.
+    const dateWord = /^(?:\d{1,2}[.,]?|jan(?:uary|vier)?\.?|f[eé]b(?:ruary)?\.?|f[eé]vr(?:ier)?\.?|mar(?:ch|s)?\.?|apr(?:il)?\.?|avr(?:il)?\.?|may|mai|jun(?:e)?\.?|juin|jul(?:y)?\.?|juil(?:let)?\.?|aug(?:ust)?\.?|ao[uû]t|sep(?:t(?:ember|embre)?)?\.?|oct(?:ober|obre)?\.?|nov(?:ember|embre)?\.?|d[eé]c(?:ember|embre)?\.?)$/i;
+    matches = matches.map(item => {
+      if (!item) return item;
+      const dates = items.filter(word => word !== item && dateWord.test(word.text) && word.x0 >= item.x1 && word.x1 <= item.x0 + roughWidth * .9 && Math.abs(word.cy - item.cy) < Math.max(3, item.height || 0) * .75);
+      if (!dates.length) return item;
+      const x1 = Math.max(item.x1, ...dates.map(word => word.x1));
+      return { ...item, x1, cx: (item.x0 + x1) / 2 };
+    });
+    if (canRecover) {
+      const width = spacing(matches);
+      const aligned = matches.slice(0, 5).every((item, index) => !item || Math.abs(item.cx - (matches[0].cx + index * width)) < width * .2);
+      if (!aligned || width < 20) throw new Error("Could not locate the timetable columns. Use a clear picture of the entire timetable.");
+      matches = matches.map((item, index) => {
+        if (item || index >= 5) return item;
+        const cx = matches[0].cx + index * width;
+        const reference = matches[0];
+        return { ...reference, text: DAYS[index], cx, x0: cx - width * .2, x1: cx + width * .2 };
+      });
+    }
     const headers = matches.filter(Boolean);
-    const width = median(headers.slice(1).map((item, index) => item.cx - headers[index].cx));
-    if (width < 35 || headers.some(header => Math.abs(header.cy - headers[0].cy) > width / 3)) throw new Error("Could not locate the timetable columns. Crop the picture to the schedule and keep it upright.");
+    const width = spacing(matches);
+    if (width < 20 || headers.some(header => Math.abs(header.cy - headers[0].cy) > width / 3) || headers.some((header, index) => Math.abs(header.cx - (headers[0].cx + index * width)) > width * .25)) throw new Error("Could not locate the timetable columns. Crop the picture to the schedule and keep it upright.");
     return matches.flatMap((item, index) => item ? [{ day: DAYS[index], center: item.cx, left: item.cx - width / 2, right: item.cx + width / 2, width, header: item }] : []);
   }
 
@@ -104,6 +162,7 @@
     // two labels locates the boundary, not two separate start/end phases.
     const centers = [...groups].map(([minute, labels]) => ({ minute, cy: labels.reduce((sum, label) => sum + label.cy, 0) / labels.length, labels })).sort((a, b) => a.minute - b.minute);
     const paired = centers.filter(point => point.labels.length >= 2);
+    if (paired.length < 3) throw new Error("Could not identify shared timetable boundaries. Use the full timetable view, not the numbered schedule-configuration grid.");
     const { slope, intercept } = fitTimeAxis(paired.length >= 8 ? paired : centers);
     const valid = centers.filter(point => Math.abs(point.cy - (intercept + point.minute * slope)) < slope * 9);
     if (!Number.isFinite(slope) || valid.length < 8 || valid.length < centers.length * .65) throw new Error("The time labels are unclear. Try an upright screenshot with the full time column.");
@@ -126,41 +185,91 @@
     return { items, rowHeight: slope * 30, top: intercept + first * slope, bottom: intercept + last * slope, mode: "half-hour" };
   }
 
+  function pairedTimeGrid(points) {
+    for (const period of [30, 60]) {
+      const residues = new Map();
+      for (const point of points) {
+        const phase = point.minute % period;
+        if (!residues.has(phase)) residues.set(phase, []);
+        residues.get(phase).push(point);
+      }
+      const phases = [...residues].sort((a, b) => b[1].length - a[1].length).slice(0, 2);
+      if (phases.length !== 2 || phases.some(([, labels]) => labels.length < 4) || phases.reduce((sum, [, labels]) => sum + labels.length, 0) < points.length * .65) continue;
+      // Fitting each phase separately avoids treating the padding around
+      // printed start/end labels as minutes on the clock.
+      const fits = phases.map(([phase, labels]) => ({ phase, labels, ...fitTimeAxis(labels) }));
+      if (fits.some(fit => !Number.isFinite(fit.slope))) continue;
+      const rowHeight = median(fits.map(fit => fit.slope * period));
+      if (fits.some(fit => Math.abs(fit.slope * period - rowHeight) > rowHeight * .1)) continue;
+      const consecutive = fits.reduce((sum, fit) => {
+        const minutes = [...new Set(fit.labels.map(point => point.minute))].sort((a, b) => a - b);
+        return sum + minutes.slice(1).filter((minute, index) => minute - minutes[index] === period).length;
+      }, 0);
+      if (consecutive < 3) continue;
+      for (const startFit of fits) {
+        const endFit = fits.find(fit => fit !== startFit);
+        const duration = (endFit.phase - startFit.phase + period) % period;
+        const firstObserved = Math.min(...points.map(point => point.minute));
+        const first = firstObserved - ((firstObserved - startFit.phase + period) % period);
+        const startCy = startFit.intercept + first * startFit.slope;
+        const endCy = endFit.intercept + (first + duration) * endFit.slope;
+        const withinRow = endCy - startCy;
+        if (withinRow < rowHeight * .5 || withinRow > rowHeight * .95) continue;
+        const rows = new Map();
+        let accepted = 0;
+        for (const point of points) {
+          const choices = [{ kind: "start", cy: startCy, minute: first }, { kind: "end", cy: endCy, minute: first + duration }].map(phase => {
+            const row = Math.round((point.cy - phase.cy) / rowHeight);
+            return { ...phase, row, distance: Math.abs(point.cy - (phase.cy + row * rowHeight)), expected: phase.minute + row * period };
+          }).filter(phase => phase.distance <= rowHeight * .18 && Math.abs(point.minute - phase.expected) <= 10).sort((a, b) => a.distance - b.distance);
+          const match = choices[0];
+          if (!match) continue;
+          accepted += 1;
+          if (!rows.has(match.row)) rows.set(match.row, {});
+          const row = rows.get(match.row);
+          if (!row[match.kind] || match.distance < row[match.kind].distance) row[match.kind] = { point, distance: match.distance };
+        }
+        if (accepted < 8 || accepted < points.length * .65 || rows.size < 4) continue;
+        const firstRow = Math.min(...rows.keys()), lastRow = Math.max(...rows.keys());
+        const labels = [...rows.values()].flatMap(row => [row.start?.point, row.end?.point].filter(Boolean));
+        const height = median(labels.map(point => point.height));
+        const x0 = Math.min(...labels.map(point => point.x0)), x1 = Math.max(...labels.map(point => point.x1));
+        const items = [];
+        let consistent = true;
+        for (let index = firstRow; index <= lastRow; index += 1) {
+          const row = rows.get(index) || {};
+          const expectedStart = first + index * period, expectedEnd = expectedStart + duration;
+          const shift = row.start ? row.start.point.minute - expectedStart : row.end ? row.end.point.minute - expectedEnd : 0;
+          const start = row.start?.point.minute ?? expectedStart + shift;
+          const end = row.end?.point.minute ?? expectedEnd + shift;
+          if (end <= start || end - start > period || (items.length && start < Number(items.at(-1).text.slice(0, 2)) * 60 + Number(items.at(-1).text.slice(3)))) { consistent = false; break; }
+          for (const [kind, minute, cy] of [["start", start, startCy + index * rowHeight], ["end", end, endCy + index * rowHeight]]) {
+            const observed = row[kind]?.point;
+            const center = observed?.cy ?? cy;
+            items.push({ text: `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`, x0, x1, cx: (x0 + x1) / 2, cy: center, y0: center - height / 2, y1: center + height / 2, height });
+          }
+        }
+        if (!consistent) continue;
+        // Clock times and physical row heights can change near the end of a
+        // day. Preserve observed labels and use local boundary positions.
+        const top = items[0].y0 - height / 2;
+        const bottom = items.at(-1).y1 + height / 2;
+        const boundaries = [top];
+        for (let index = 2; index < items.length; index += 2) boundaries.push((items[index - 1].cy + items[index].cy) / 2);
+        boundaries.push(bottom);
+        return { items, rowHeight, top, bottom, boundaries, mode: "paired", period };
+      }
+    }
+    throw new Error("The time labels are unclear or this timetable uses an unsupported time grid. Try a sharper picture or import its original PDF.");
+  }
+
   function timeGrid(items, headerBottom) {
     const markers = items.map(item => ({ ...item, time: normalizedTime(item.text) })).filter(item => item.time && item.y0 > headerBottom);
     markers.sort((a, b) => a.cy - b.cy);
     const points = markers.map(item => ({ ...item, minute: Number(item.time.slice(0, 2)) * 60 + Number(item.time.slice(3)) }));
     if (points.length < 8) throw new Error("Could not read enough time labels. Include the time column on the left in a sharper screenshot.");
     if (points.filter(point => point.minute % 30 === 0).length >= points.length * .75) return halfHourGrid(points, headerBottom);
-    // Fit the printed time axis robustly so a missed OCR label cannot shift
-    // every subsequent class by a row. Reject inconsistent axes instead.
-    const { slope, intercept } = fitTimeAxis(points);
-    const valid = points.filter(point => Math.abs(point.cy - (intercept + point.minute * slope)) < slope * 5);
-    if (!Number.isFinite(slope) || valid.length < 8 || valid.length < points.length * 0.65) throw new Error("The time labels are unclear. Try an upright screenshot with the full time column.");
-    const residues = new Map();
-    for (const point of valid) residues.set(point.minute % 30, (residues.get(point.minute % 30) || 0) + 1);
-    const phases = [...residues].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([phase]) => phase);
-    if (phases.length !== 2) throw new Error("Could not identify the timetable start and end labels.");
-    const startPhase = phases.find(phase => phases.includes((phase + 20) % 30));
-    if (startPhase === undefined) throw new Error("This timetable uses an unsupported time grid. Please import its original PDF.");
-    const first = Math.min(...valid.map(point => point.minute));
-    const last = Math.max(...valid.map(point => point.minute));
-    const firstStart = first - ((first - startPhase + 30) % 30);
-    const height = median(valid.map(point => point.height));
-    const x0 = Math.min(...valid.map(point => point.x0));
-    const x1 = Math.max(...valid.map(point => point.x1));
-    const result = [];
-    for (let minute = firstStart; minute <= last; minute += 30) {
-      for (const offset of [0, 20]) {
-        const total = minute + offset;
-        const observed = valid.find(point => point.minute === total);
-        const cy = observed?.cy ?? intercept + total * slope;
-        result.push({ text: `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`, x0, x1,
-          cx: (x0 + x1) / 2, cy, y0: cy - height / 2, y1: cy + height / 2, height });
-      }
-    }
-    const top = result[0].y0 - slope * 5;
-    return { items: result, rowHeight: slope * 30, top, bottom: top + result.length / 2 * slope * 30, mode: "paired" };
+    return pairedTimeGrid(points);
   }
 
   function borderRows(canvas, column, minimumY, maximumY = canvas.height * BASE_WIDTH / canvas.width) {
@@ -212,13 +321,15 @@
     const rects = [];
     for (const column of columns) {
       const detected = borderRows(canvas, column, grid.top - grid.rowHeight * 0.25, grid.bottom + grid.rowHeight * .15);
+      const lattice = grid.boundaries || Array.from({ length: Math.round((grid.bottom - grid.top) / grid.rowHeight) + 1 }, (_, row) => grid.top + row * grid.rowHeight);
       // A dense line of course text can resemble a border. Only keep lines
       // aligned with the validated row lattice, merging nearby JPEG edges.
       const aligned = new Map();
       for (const y of detected) {
-        const row = Math.round((y - grid.top) / grid.rowHeight);
-        const expected = grid.top + row * grid.rowHeight;
-        if (row < 0 || expected > grid.bottom + 1 || Math.abs(y - expected) > Math.max(2, grid.rowHeight * .12)) continue;
+        let row = 0;
+        for (let index = 1; index < lattice.length; index += 1) if (Math.abs(y - lattice[index]) < Math.abs(y - lattice[row])) row = index;
+        const expected = lattice[row];
+        if (Math.abs(y - expected) > Math.max(2, grid.rowHeight * (grid.boundaries ? .18 : .12))) continue;
         if (!aligned.has(row) || Math.abs(y - expected) < Math.abs(aligned.get(row) - expected)) aligned.set(row, y);
       }
       const boundaries = [...aligned.values()].sort((a, b) => a - b);
@@ -248,22 +359,25 @@
     const box = item => ({ ...item, x0: x(item.x0), x1: x(item.x1), y0: y(item.y0), y1: y(item.y1), cx: x(item.cx), cy: y(item.cy), height: item.height * factor });
     return { canvas: cropped,
       columns: columns.map(column => ({ ...column, left: x(column.left), right: x(column.right), center: x(column.center), width: column.width * factor, header: box(column.header) })),
-      grid: { ...grid, items: grid.items.map(box), rowHeight: grid.rowHeight * factor, top: y(grid.top), bottom: y(grid.bottom) },
+      grid: { ...grid, items: grid.items.map(box), rowHeight: grid.rowHeight * factor, top: y(grid.top), bottom: y(grid.bottom), ...(grid.boundaries ? { boundaries: grid.boundaries.map(y) } : {}) },
     };
   }
 
   function containsInk(canvas, rectangle) {
     const scale = canvas.width / BASE_WIDTH;
-    const left = Math.max(0, Math.ceil((rectangle.x0 + 2) * scale));
+    // Header centering can be a few pixels off. Ignore the column-edge area
+    // so a dark vertical border cannot make an empty cell look occupied.
+    const marginX = Math.max(2, rectangle.width * .05);
+    const left = Math.max(0, Math.ceil((rectangle.x0 + marginX) * scale));
     const top = Math.max(0, Math.ceil((rectangle.y0 + 2) * scale));
-    const width = Math.min(canvas.width - left, Math.floor((rectangle.width - 4) * scale));
+    const width = Math.min(canvas.width - left, Math.floor((rectangle.width - marginX * 2) * scale));
     const height = Math.min(canvas.height - top, Math.floor((rectangle.height - 4) * scale));
     if (width < 1 || height < 1) return false;
     const { data } = canvas.getContext("2d").getImageData(left, top, width, height);
     let ink = 0;
     for (let offset = 0; offset < data.length; offset += 16) {
       const r = data[offset], g = data[offset + 1], b = data[offset + 2];
-      if (Math.min(r, g, b) < 95 && (r + g + b) / 3 < 160) ink += 1;
+      if (Math.min(r, g, b) < 160 && (r + g + b) / 3 < 180) ink += 1;
     }
     return ink > Math.max(12, width * height * 0.0003);
   }
@@ -297,7 +411,26 @@
       let scale = BASE_WIDTH / canvas.width;
       const full = await worker.recognize(canvas, {}, { blocks: true, text: true });
       const fullItems = wordsFromData(full.data, scale);
-      let columns = headersFromItems(fullItems);
+      let columns;
+      try { columns = headersFromItems(fullItems); }
+      catch (error) {
+        const partial = headerRow(fullItems).filter(Boolean);
+        if (partial.length < 2 || (partial.length < 3 && (!partial.some(item => item.day === 0) || !partial.some(item => item.day === 4)))) throw error;
+        stage = "Reading the weekday headings";
+        await worker.setParameters({ tessedit_pageseg_mode: "7" });
+        const padding = Math.max(...partial.map(item => item.height)) * .35;
+        const top = Math.max(0, Math.floor((Math.min(...partial.map(item => item.y0)) - padding) / scale));
+        const bottom = Math.min(canvas.height, Math.ceil((Math.max(...partial.map(item => item.y1)) + padding) / scale));
+        const widths = partial.slice(1).map((item, index) => (item.cx - partial[index].cx) / (item.day - partial[index].day));
+        const columnWidth = median(widths);
+        const firstCenter = median(partial.map(item => item.cx - item.day * columnWidth));
+        const left = Math.max(0, Math.floor((firstCenter - columnWidth * .7) / scale));
+        const right = Math.min(canvas.width, Math.ceil((firstCenter + columnWidth * 4.8) / scale));
+        const band = await worker.recognize(canvas, { rectangle: { left, top, width: right - left, height: bottom - top } }, { blocks: true });
+        const headings = wordsFromData(band.data, scale);
+        try { columns = headersFromItems(headings, { recoverMissing: true }); }
+        catch { columns = headersFromItems(fullItems, { recoverMissing: true }); }
+      }
       const headerBottom = Math.max(...columns.map(column => column.header.y1));
       stage = "Reading the time column";
       let grid;
@@ -306,7 +439,9 @@
       } catch {
         // Leave enough room for the final digit: header text can be off-center.
         await worker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "0123456789:." });
-        const gutter = await worker.recognize(canvas, { rectangle: { left: 0, top: Math.max(0, Math.floor(headerBottom / scale)), width: Math.floor((columns[0].left + 3) / scale), height: canvas.height - Math.floor(headerBottom / scale) } }, { blocks: true });
+        const left = Math.max(0, Math.floor((columns[0].left - columns[0].width * .7) / scale));
+        const right = Math.min(canvas.width, Math.ceil((columns[0].left + 3) / scale));
+        const gutter = await worker.recognize(canvas, { rectangle: { left, top: Math.max(0, Math.floor(headerBottom / scale)), width: right - left, height: canvas.height - Math.floor(headerBottom / scale) } }, { blocks: true });
         grid = timeGrid(wordsFromData(gutter.data, scale).filter(item => item.x1 <= columns[0].left + 3), headerBottom);
       }
       status("Isolating the timetable from the rest of the picture…");
@@ -403,6 +538,6 @@
     finally { canvas.width = canvas.height = 1; }
   }
 
-  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { timeGrid, borderRows, headersFromItems, classesFromCells, classRegions, containsInk, isolateTimetable } };
+  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { wordsFromData, timeGrid, borderRows, headersFromItems, classesFromCells, classRegions, containsInk, isolateTimetable } };
 })();
 
