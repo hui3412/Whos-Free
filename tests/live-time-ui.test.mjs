@@ -25,7 +25,7 @@ test("compact day/time controls preview edits immediately and restore live time"
     assert.equal(el("timeInput").getAttribute("aria-label"), "Time");
     assert.equal(el("refreshButton"), null);
     assert.equal(el("liveToggle").closest("label").nextElementSibling, el("viewToggleButton"));
-    assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle"));
+    assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle").parentElement);
     const originalDay = el("daySelect").value;
     el("timeInput").value = "08:30";
     el("timeInput").dispatchEvent(new window.Event("input"));
@@ -54,3 +54,4 @@ test("compact day/time controls preview edits immediately and restore live time"
     assert.equal(el("timeInput").value, "10:00", "native change events remain supported");
   } finally { await window.happyDOM.abort(); }
 });
+

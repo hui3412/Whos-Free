@@ -149,7 +149,7 @@ test("group dialog validates duplicate names, saves safely and traps keyboard fo
 test("Manage sits beside the main group toggle and appears only in group view", async () => {
   const { window, el, manage, finish, create } = await app();
   try {
-    assert.equal(el("showGroupsToggle").parentElement, el("viewToggleButton").parentElement);
+    assert.equal(el("showGroupsToggle").closest(".people-actions"), el("viewToggleButton").parentElement);
     for (const id of ["showGroupsToggle", "viewToggleButton"]) {
       assert.ok(el(id).querySelector('svg[aria-hidden="true"]'));
       assert.ok(el(id).getAttribute("aria-label"));
@@ -159,7 +159,7 @@ test("Manage sits beside the main group toggle and appears only in group view", 
     assert.equal(el("manageGroupsButton").textContent, "Manage");
     assert.equal(el("manageGroupsButton").hidden, true);
     assert.equal(el("groupVisibility"), null);
-    assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle"));
+    assert.equal(el("viewToggleButton").nextElementSibling, el("showGroupsToggle").parentElement);
     assert.equal(el("viewToggleButton").querySelector("[data-mode-label]").textContent, "Free");
     manage(); create("Lunch", ["Alice", "Bob"]); finish();
     assert.equal(el("manageGroupsButton").hidden, false);
