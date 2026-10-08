@@ -263,12 +263,67 @@
     throw new Error("The time labels are unclear or this timetable uses an unsupported time grid. Try a sharper picture or import its original PDF.");
   }
 
-  function timeGrid(items, headerBottom) {
+  function boundaryTimeGrid(points, headerBottom, canvas, firstColumn) {
+    // A browser's image resampling can make OCR omit one of the two labels at
+    // a shared half-hour boundary. Validate those labels against the *visible*
+    // time-gutter rules instead of inventing duplicates or guessing an axis.
+    const labels = points.filter(point => point.minute % 30 === 0);
+    if (labels.length < 8) throw new Error("Not enough clock labels for border validation.");
+    const x0 = median(labels.map(point => point.x0));
+    const x1 = median(labels.map(point => point.x1));
+    if (x1 >= firstColumn.left + 4 || x1 <= x0) throw new Error("Time labels are not inside the time column.");
+    const padding = Math.max(2, (x1 - x0) * .12);
+    const gutter = { left: Math.max(0, x0 - padding), right: Math.min(firstColumn.left, x1 + padding) };
+    gutter.width = gutter.right - gutter.left;
+    const rough = fitTimeAxis(labels).slope * 30;
+    if (!Number.isFinite(rough) || rough < 3) throw new Error("Time-column spacing is unclear.");
+    const borders = borderRows(canvas, gutter, headerBottom, Math.max(...labels.map(point => point.cy)) + rough * .6);
+    const gaps = borders.slice(1).map((y, index) => y - borders[index]);
+    const rowHeight = median(gaps.filter(gap => gap > rough * .65 && gap < rough * 1.35));
+    if (!Number.isFinite(rowHeight) || borders.length < 9) throw new Error("Not enough visible time-column borders.");
+    const top = borders[0];
+    const lattice = borders.map(y => ({ y, row: Math.round((y - top) / rowHeight) }))
+      .filter(value => Math.abs(value.y - top - value.row * rowHeight) <= Math.max(1.5, rowHeight * .08));
+    if (lattice.length < 9 || lattice.length < borders.length * .85) throw new Error("Time-column borders are inconsistent.");
+    const matched = labels.flatMap(point => {
+      const boundary = lattice.reduce((best, value) => Math.abs(value.y - point.cy) < Math.abs(best.y - point.cy) ? value : best);
+      // Labels in the middle of numbered configuration rows are not boundaries.
+      return Math.abs(boundary.y - point.cy) <= rowHeight * .35 ? [{ ...point, row: boundary.row }] : [];
+    });
+    const origin = median(matched.map(point => point.minute - point.row * 30));
+    const valid = matched.filter(point => point.minute === origin + point.row * 30);
+    if (valid.length < 8 || valid.length < labels.length * .8 || new Set(valid.map(point => point.minute)).size < 8) throw new Error("Clock labels do not agree with visible borders.");
+    const observedFirst = Math.min(...valid.map(point => point.row));
+    // The first physical gutter rule immediately under the heading is another
+    // independent anchor when a few early labels are missed. Limit recovery
+    // to two hours, just as the duplicate-label method does.
+    const first = observedFirst <= 4 && top - headerBottom <= rowHeight * .4 && origin >= 0 ? 0 : observedFirst;
+    const last = Math.max(...valid.map(point => point.row));
+    const height = median(valid.map(point => point.height));
+    const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    const items = [];
+    for (let row = first; row < last; row++) {
+      const y = top + row * rowHeight, next = y + rowHeight;
+      items.push({ text: clock(origin + row * 30), x0, x1, cx: (x0 + x1) / 2, y0: y, y1: y + height, cy: y + height / 2, height });
+      items.push({ text: clock(origin + (row + 1) * 30), x0, x1, cx: (x0 + x1) / 2, y0: next - height, y1: next, cy: next - height / 2, height });
+    }
+    return { items, rowHeight, top: top + first * rowHeight, bottom: top + last * rowHeight, mode: "half-hour", boundaryValidated: true };
+  }
+
+  function timeGrid(items, headerBottom, evidence = {}) {
     const markers = items.map(item => ({ ...item, time: normalizedTime(item.text) })).filter(item => item.time && item.y0 > headerBottom);
     markers.sort((a, b) => a.cy - b.cy);
     const points = markers.map(item => ({ ...item, minute: Number(item.time.slice(0, 2)) * 60 + Number(item.time.slice(3)) }));
     if (points.length < 8) throw new Error("Could not read enough time labels. Include the time column on the left in a sharper screenshot.");
-    if (points.filter(point => point.minute % 30 === 0).length >= points.length * .75) return halfHourGrid(points, headerBottom);
+    if (points.filter(point => point.minute % 30 === 0).length >= points.length * .75) {
+      try { return halfHourGrid(points, headerBottom); }
+      catch (error) {
+        if (evidence.canvas && evidence.column) {
+          try { return boundaryTimeGrid(points, headerBottom, evidence.canvas, evidence.column); } catch { /* Retry OCR, never guess. */ }
+        }
+        throw error;
+      }
+    }
     return pairedTimeGrid(points);
   }
 
@@ -392,6 +447,61 @@
     return ink > Math.max(12, width * height * 0.0003);
   }
 
+  function recognitionPatch(canvas, rectangle, { contrast = false, removeRules = false } = {}) {
+    // Only upscale the region being retried. Keep one temporary canvas, with a
+    // strict pixel budget, rather than several full-page copies on a phone.
+    const factor = Math.min(3, Math.max(1, 32 / Math.max(1, rectangle.textHeight || 16)), 4000 / rectangle.height, Math.sqrt(6000000 / (rectangle.width * rectangle.height)));
+    const patch = document.createElement("canvas");
+    const padding = 12;
+    patch.width = Math.round(rectangle.width * factor) + padding * 2;
+    patch.height = Math.round(rectangle.height * factor) + padding * 2;
+    const context = patch.getContext("2d", { willReadFrequently: true });
+    context.fillStyle = "white";
+    context.fillRect(0, 0, patch.width, patch.height);
+    context.drawImage(canvas, rectangle.left, rectangle.top, rectangle.width, rectangle.height, padding, padding, patch.width - padding * 2, patch.height - padding * 2);
+    if (contrast || removeRules) {
+      const image = context.getImageData(0, 0, patch.width, patch.height);
+      const { data } = image;
+      for (let y = padding; y < patch.height - padding; y++) {
+        let dark = 0;
+        let minimum = 255, maximum = 0;
+        for (let x = padding; x < patch.width - padding; x++) {
+          const offset = (y * patch.width + x) * 4;
+          const value = Math.min(data[offset], data[offset + 1], data[offset + 2]);
+          const shade = contrast ? (value < 170 ? 0 : 255) : value;
+          data[offset] = data[offset + 1] = data[offset + 2] = shade;
+          minimum = Math.min(minimum, shade); maximum = Math.max(maximum, shade);
+          if (shade < 245) dark++;
+        }
+        if (removeRules && dark > (patch.width - padding * 2) * .8 && maximum - minimum < 35) {
+          for (let x = padding; x < patch.width - padding; x++) {
+            const offset = (y * patch.width + x) * 4;
+            data[offset] = data[offset + 1] = data[offset + 2] = 255;
+          }
+        }
+      }
+      context.putImageData(image, 0, 0);
+    }
+    const factorX = (patch.width - padding * 2) / rectangle.width;
+    const factorY = (patch.height - padding * 2) / rectangle.height;
+    return { canvas: patch, restore: word => {
+      const x = value => rectangle.left + (value - padding) / factorX;
+      const y = value => rectangle.top + (value - padding) / factorY;
+      return { ...word, x0: x(word.x0), x1: x(word.x1), y0: y(word.y0), y1: y(word.y1), cx: x(word.cx), cy: y(word.cy), height: word.height / factorY };
+    } };
+  }
+
+  async function patchWords(worker, canvas, rectangle, scale, parameters, processing) {
+    const patch = recognitionPatch(canvas, rectangle, processing);
+    try {
+      await worker.setParameters(parameters);
+      const result = await worker.recognize(patch.canvas, {}, { blocks: true, text: true });
+      return wordsFromData(result.data, 1).map(patch.restore).map(word => ({ ...word,
+        x0: word.x0 * scale, x1: word.x1 * scale, y0: word.y0 * scale, y1: word.y1 * scale,
+        cx: word.cx * scale, cy: word.cy * scale, height: word.height * scale }));
+    } finally { patch.canvas.width = patch.canvas.height = 1; }
+  }
+
   async function parseScheduleCanvas(canvas, filename, options = {}) {
     const status = options.onProgress || (() => {});
     status("Loading picture recognition on this device…");
@@ -411,51 +521,89 @@
         corePath: new URL("core/", base).href,
         langPath: new URL("lang/", base).href.replace(/\/$/, ""),
         workerBlobURL: false,
-        errorHandler: error => rejectBoot(new Error(`Picture recognition could not start. Open the app online and try again. ${String(error)}`)),
+        errorHandler: error => rejectBoot(new Error(`Picture recognition stopped while ${stage.toLowerCase()}. Open the app online and try again. ${String(error)}`)),
         logger: message => { if (message.status === "recognizing text") status(`${stage}… ${Math.round(message.progress * 100)}%`); },
       });
       creation.then(value => { if (bootFailed) value.terminate(); }, () => {});
       worker = await Promise.race([creation, bootFailure]);
       clearTimeout(bootTimer);
+      const recognize = worker.recognize.bind(worker);
+      worker.recognize = async (...args) => {
+        let timer;
+        try {
+          return await Promise.race([recognize(...args), bootFailure, new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`Picture recognition stalled while ${stage.toLowerCase()}. Try again with a smaller, clear screenshot.`)), 120000);
+          })]);
+        } finally { clearTimeout(timer); }
+      };
       await worker.setParameters({ tessedit_pageseg_mode: "11", user_defined_dpi: "300" });
       let scale = BASE_WIDTH / canvas.width;
       const full = await worker.recognize(canvas, {}, { blocks: true, text: true });
-      const fullItems = wordsFromData(full.data, scale);
+      let fullItems = wordsFromData(full.data, scale);
       let columns;
       try { columns = headersFromItems(fullItems); }
       catch (error) {
-        const partial = headerRow(fullItems).filter(Boolean);
-        if (partial.length < 2 || (partial.length < 3 && (!partial.some(item => item.day === 0) || !partial.some(item => item.day === 4)))) throw error;
-        stage = "Reading the weekday headings";
-        await worker.setParameters({ tessedit_pageseg_mode: "7" });
-        const padding = Math.max(...partial.map(item => item.height)) * .35;
-        const top = Math.max(0, Math.floor((Math.min(...partial.map(item => item.y0)) - padding) / scale));
-        const bottom = Math.min(canvas.height, Math.ceil((Math.max(...partial.map(item => item.y1)) + padding) / scale));
-        const widths = partial.slice(1).map((item, index) => (item.cx - partial[index].cx) / (item.day - partial[index].day));
-        const columnWidth = median(widths);
-        const firstCenter = median(partial.map(item => item.cx - item.day * columnWidth));
-        const left = Math.max(0, Math.floor((firstCenter - columnWidth * .7) / scale));
-        const right = Math.min(canvas.width, Math.ceil((firstCenter + columnWidth * 4.8) / scale));
-        const band = await worker.recognize(canvas, { rectangle: { left, top, width: right - left, height: bottom - top } }, { blocks: true });
-        const headings = wordsFromData(band.data, scale);
-        try { columns = headersFromItems(headings, { recoverMissing: true }); }
-        catch { columns = headersFromItems(fullItems, { recoverMissing: true }); }
+        let partial = headerRow(fullItems).filter(Boolean);
+        if (partial.length < 2) {
+          stage = "Retrying the timetable layout";
+          await worker.setParameters({ tessedit_pageseg_mode: "3", tessedit_char_whitelist: "" });
+          const layout = await worker.recognize(canvas, {}, { blocks: true, text: true });
+          fullItems = wordsFromData(layout.data, scale);
+          try { columns = headersFromItems(fullItems); } catch { partial = headerRow(fullItems).filter(Boolean); }
+        }
+        if (!columns) {
+          if (partial.length < 2 || (partial.length < 3 && (!partial.some(item => item.day === 0) || !partial.some(item => item.day === 4)))) throw error;
+          stage = "Reading the weekday headings";
+          await worker.setParameters({ tessedit_pageseg_mode: "7" });
+          const padding = Math.max(...partial.map(item => item.height)) * .35;
+          const top = Math.max(0, Math.floor((Math.min(...partial.map(item => item.y0)) - padding) / scale));
+          const bottom = Math.min(canvas.height, Math.ceil((Math.max(...partial.map(item => item.y1)) + padding) / scale));
+          const widths = partial.slice(1).map((item, index) => (item.cx - partial[index].cx) / (item.day - partial[index].day));
+          const columnWidth = median(widths);
+          const firstCenter = median(partial.map(item => item.cx - item.day * columnWidth));
+          const left = Math.max(0, Math.floor((firstCenter - columnWidth * .7) / scale));
+          const right = Math.min(canvas.width, Math.ceil((firstCenter + columnWidth * 4.8) / scale));
+          const band = await worker.recognize(canvas, { rectangle: { left, top, width: right - left, height: bottom - top } }, { blocks: true });
+          const headings = wordsFromData(band.data, scale);
+          try { columns = headersFromItems(headings, { recoverMissing: true }); }
+          catch {
+            try { columns = headersFromItems(fullItems, { recoverMissing: true }); }
+            catch {
+              const restored = await patchWords(worker, canvas, { left, top, width: right - left, height: bottom - top, textHeight: median(partial.map(item => item.height)) / scale }, scale,
+                { tessedit_pageseg_mode: "7", tessedit_char_whitelist: "" }, { contrast: true });
+              columns = headersFromItems(restored, { recoverMissing: true });
+            }
+          }
+        }
       }
       const headerBottom = Math.max(...columns.map(column => column.header.y1));
       stage = "Reading the time column";
       let grid;
       try {
-        grid = timeGrid(fullItems.filter(item => item.x1 <= columns[0].left + 2), headerBottom);
+        grid = timeGrid(fullItems.filter(item => item.x1 <= columns[0].left + 2), headerBottom, { canvas, column: columns[0] });
       } catch {
         // Leave enough room for the final digit: header text can be off-center.
         await worker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "0123456789:." });
         const left = Math.max(0, Math.floor((columns[0].left - columns[0].width * .7) / scale));
         const right = Math.min(canvas.width, Math.ceil((columns[0].left + 3) / scale));
-        const gutter = await worker.recognize(canvas, { rectangle: { left, top: Math.max(0, Math.floor(headerBottom / scale)), width: right - left, height: canvas.height - Math.floor(headerBottom / scale) } }, { blocks: true });
-        grid = timeGrid(wordsFromData(gutter.data, scale).filter(item => item.x1 <= columns[0].left + 3), headerBottom);
+        const rectangle = { left, top: Math.max(0, Math.floor(headerBottom / scale)), width: right - left, height: canvas.height - Math.floor(headerBottom / scale) };
+        const gutter = await worker.recognize(canvas, { rectangle }, { blocks: true });
+        const evidence = { canvas, column: columns[0] };
+        try { grid = timeGrid(wordsFromData(gutter.data, scale).filter(item => item.x1 <= columns[0].left + 3), headerBottom, evidence); }
+        catch {
+          for (const [mode, contrast] of [["11", false], ["6", true]]) {
+            stage = contrast ? "Retrying faint time labels" : "Retrying the time column without grid lines";
+            const words = await patchWords(worker, canvas, rectangle, scale,
+              { tessedit_pageseg_mode: mode, tessedit_char_whitelist: "0123456789:." }, { contrast, removeRules: true });
+            try { grid = timeGrid(words.filter(item => item.x1 <= columns[0].left + 3), headerBottom, evidence); break; }
+            catch { /* Continue to the next independent reading method. */ }
+          }
+          if (!grid) throw new Error("Could not validate the time column after several on-device reading methods. Include all the times and grid borders in a clear, upright screenshot. (Reader 50: time column)");
+        }
       }
       status("Isolating the timetable from the rest of the picture…");
       const isolated = isolateTimetable(canvas, columns, grid);
+      if (options.releaseSourceCanvas) canvas.width = canvas.height = 1;
       canvas = croppedCanvas = isolated.canvas;
       columns = isolated.columns;
       grid = isolated.grid;
@@ -471,8 +619,22 @@
         const top = Math.max(0, Math.ceil((rect.y0 + 1.5) / scale));
         const right = Math.min(canvas.width, Math.floor((rect.x1 - 1.5) / scale));
         const bottom = Math.min(canvas.height, Math.floor((rect.y1 - 1.5) / scale));
-        const result = await worker.recognize(canvas, { rectangle: { left, top, width: right - left, height: bottom - top } }, { blocks: true, text: true });
-        const words = wordsFromData(result.data, scale);
+        const rectangle = { left, top, width: right - left, height: bottom - top };
+        const result = await worker.recognize(canvas, { rectangle }, { blocks: true, text: true });
+        let words = wordsFromData(result.data, scale);
+        const quality = values => {
+          const readable = values.filter(word => /[a-z0-9]/i.test(word.text));
+          const confidence = readable.length ? readable.reduce((sum, word) => sum + (Number.isFinite(word.confidence) ? word.confidence : 0), 0) / readable.length : 0;
+          return confidence + Math.min(20, readable.length * 2);
+        };
+        if (!words.length || quality(words) < 65) {
+          stage = `Retrying unclear class ${recognized} of ${rects.length}`;
+          const restored = await patchWords(worker, canvas, { ...rectangle, textHeight: median(words.map(word => word.height)) / scale || 16 }, scale,
+            { tessedit_pageseg_mode: "11", tessedit_char_whitelist: "" }, { contrast: true });
+          // Pick one complete pass, not a mixture of disagreeing course codes.
+          if (quality(restored) > quality(words)) words = restored;
+          await worker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "" });
+        }
         // Merge each line within one cell so spaced course codes and section
         // labels remain together without ever joining neighboring columns.
         const groups = [];
@@ -497,10 +659,18 @@
       }
       const starts = grid.items.filter((_, index) => index % 2 === 0).map(item => ({ time: item.text, y0: item.y0, y1: item.y1, center: item.cy }));
       const ends = grid.items.filter((_, index) => index % 2 === 1).map(item => ({ time: item.text, y0: item.y0, y1: item.y1, center: item.cy }));
+      if (recognizedCells.length >= 4 && recognizedCells.filter(cell => !cell.words.some(word => /[a-z0-9]/i.test(word.text))).length > recognizedCells.length / 2) {
+        throw new Error("Too much of the timetable is unreadable, even after text retries. Try a closer screenshot of the timetable, with all headings and times included.");
+      }
       const classes = classesFromCells(recognizedCells, starts, ends, grid.rowHeight);
       if (!classes.length) throw new Error("No classes could be read. Use a sharper screenshot showing the entire timetable.");
+      if (grid.boundaryValidated) for (const item of classes) {
+        item.review_warning = [item.review_warning, "Time labels were recovered using visible grid borders. Check these times against the picture."].filter(Boolean).join(" ");
+      }
       const name = globalThis.WhosFreeParser.extractScheduleName(fullItems) || "";
       return { name, person: { source_file: filename, classes }, needsReview: true };
+    } catch (error) {
+      throw new Error(`${error.message || "The picture could not be read."}${String(error.message).includes("Reader 50:") ? "" : ` (Reader 50: ${stage.toLowerCase()})`}`);
     } finally {
       bootFailed = true;
       clearTimeout(bootTimer);
@@ -544,10 +714,10 @@
   async function parseScheduleImage(file, options = {}) {
     if (!(file instanceof Blob)) throw new Error("Choose a schedule picture.");
     const canvas = await imageCanvas(file);
-    try { return await parseScheduleCanvas(canvas, file.name || "schedule.png", options); }
+    try { return await parseScheduleCanvas(canvas, file.name || "schedule.png", { ...options, releaseSourceCanvas: true }); }
     finally { canvas.width = canvas.height = 1; }
   }
 
-  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { wordsFromData, timeGrid, borderRows, headersFromItems, classesFromCells, classRegions, containsInk, isolateTimetable } };
+  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { wordsFromData, timeGrid, boundaryTimeGrid, recognitionPatch, patchWords, borderRows, headersFromItems, classesFromCells, classRegions, containsInk, isolateTimetable } };
 })();
 
