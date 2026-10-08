@@ -2558,7 +2558,8 @@
       const people = Object.fromEntries(names.map(name => [name, peopleMap()[name]]));
       const code = await window.WhosFreeShareCode.encode({ people });
       els.exportCodeOutput.value = code;
-      codeStatus(els.exportCodeStatus, `Code ready for ${names.length} schedule${names.length === 1 ? "" : "s"} · ${code.length.toLocaleString()} characters. Copy it and send it to your friend.`, "success");
+      const messageSize = code.length <= 1000 ? "Fits a 1,000-character message." : "Over 1,000 characters. Select fewer schedules for one Instagram message.";
+      codeStatus(els.exportCodeStatus, `Code ready for ${names.length} schedule${names.length === 1 ? "" : "s"} · ${code.length.toLocaleString()} characters. ${messageSize}`, "success");
       revealSection(els.exportCodeOutput.closest(".field-group"));
     } catch (error) {
       els.exportCodeOutput.value = "";
@@ -3624,7 +3625,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=57", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=58", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

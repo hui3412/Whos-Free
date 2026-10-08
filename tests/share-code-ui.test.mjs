@@ -96,6 +96,46 @@ test("a device with no schedules can import a code", async () => {
   } finally { await receiver.window.happyDOM.abort(); }
 });
 
+test("compact export preserves local details and reimport skips without a conflict or storage write", async () => {
+  const original = { people: { Student: { semester: "Fall 2026", classes: [{ day: "Monday", start: "09:07", end: "10:13", course: "Differential Calculus", course_code: "201-SN2-RE", section: "00001", room: "A-104", instructor: "Jane de la Cruz" }] } } };
+  const sender = await app(original);
+  try {
+    const before = JSON.stringify(sender.stored());
+    sender.el("exportSchedulesButton").click();
+    sender.el("selectAllSchedules").checked = true;
+    sender.el("selectAllSchedules").dispatchEvent(new sender.window.Event("change"));
+    sender.el("generateCodeButton").click(); await sender.wait();
+    const code = sender.el("exportCodeOutput").value;
+    const item = (await sender.window.WhosFreeShareCode.decode(code)).people.Student.classes[0];
+    assert.equal(item.course_code, null); assert.equal(item.section, null);
+    assert.equal(item.instructor, "de la Cruz"); assert.equal(item.course, "Differential Calculus");
+    assert.match(sender.el("exportCodeStatus").textContent, /Fits a 1,000-character message/);
+    assert.equal(JSON.stringify(sender.stored()), before);
+    sender.el("closeExportButton").click(); sender.el("importCodeButton").click();
+    sender.el("importCodeInput").value = code; sender.el("decodeCodeButton").click(); await sender.wait();
+    assert.match(sender.el("importCodeStatus").textContent, /Skipped 1 identical/);
+    assert.equal(sender.el("codeConflictPrompt").hidden, true);
+    assert.equal(JSON.stringify(sender.stored()), before);
+  } finally { await sender.window.happyDOM.abort(); }
+});
+
+test("message-size advice covers exactly 1000 and larger codes without truncating exports", async () => {
+  const sender = await app({ people: { Student: { classes: [] } } });
+  try {
+    sender.el("exportSchedulesButton").click();
+    sender.el("selectAllSchedules").checked = true;
+    sender.el("selectAllSchedules").dispatchEvent(new sender.window.Event("change"));
+    for (const length of [1000, 1001]) {
+      // Isolate the UI threshold; actual encoding is exercised in codec tests.
+      sender.window.WhosFreeShareCode.encode = async () => "WF4B" + "中".repeat(length - 4);
+      sender.el("generateCodeButton").click(); await sender.wait();
+      assert.equal(sender.el("exportCodeOutput").value.length, length);
+      assert.match(sender.el("exportCodeStatus").textContent, length === 1000 ? /Fits a 1,000-character message/ : /Over 1,000 characters. Select fewer schedules/);
+      assert.equal(sender.el("copyCodeButton").disabled, false);
+    }
+  } finally { await sender.window.happyDOM.abort(); }
+});
+
 for (const choice of ["both", "replace", "old"]) test(`same-name code import offers ${choice}, saves atomically and can be undone`, async () => {
   const person = (day, course = "Course") => ({ classes: [{ day, start: "09:00", end: "10:00", course }] });
   const receiver = await app({ people: { David: person("Monday") } });
