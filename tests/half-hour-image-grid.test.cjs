@@ -109,6 +109,22 @@ test("border validation rejects middle-of-row configuration labels and inconsist
   assert.throws(() => helpers.timeGrid(markers().slice(0, 7), 94, { canvas, column }), /enough time labels/);
 });
 
+test("a consistent morning-only OCR axis is rejected when afternoon rows remain visible", () => {
+  const canvas = pixelCanvas(705, 800, (_x, y) => y >= 100 && y <= 700 && (y - 100) % 30 === 0 ? [210, 210, 210] : [255, 255, 255]);
+  const column = { left: 100, right: 200, width: 100 };
+  const partial = markers().filter(item => item.text <= "14:30");
+  assert.equal(helpers.timeGrid(partial, 94).items.at(-1).text, "14:30");
+  assert.throws(() => helpers.readTimeGrid(partial, 94, { canvas, column }), /Only part/);
+  const complete = helpers.readTimeGrid(markers(), 94, { canvas, column });
+  assert.equal(complete.items.at(-1).text, "18:00");
+});
+
+test("missing leading clock rows also trigger a focused full-column retry", () => {
+  const canvas = pixelCanvas(705, 800, (_x, y) => y >= 100 && y <= 700 && (y - 100) % 30 === 0 ? [210, 210, 210] : [255, 255, 255]);
+  const column = { left: 100, right: 200, width: 100 };
+  assert.throws(() => helpers.readTimeGrid(markers().filter(item => item.text >= "11:00"), 94, { canvas, column }), /Only part/);
+});
+
 test("retry patch restores original coordinates and cleans up after OCR failures", async () => {
   const patches = [];
   const context = load({ createElement() {
