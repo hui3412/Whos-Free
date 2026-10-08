@@ -22,6 +22,12 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
 
+### Version 49 — Coloured intensive-class border detection
+
+- Checked ten additional supplied timetable pictures, including Saturday classes, tall screenshots, cropped empty final rows, and explicit intensive-class time ranges.
+- Fixed an overlapping duplicate caused by JPEG ringing around a wide title inside a purple class. A candidate grid line must now also have contrast in the padding at at least one column edge. Slightly off-center weekday headings and genuine tinted borders remain supported.
+- Added raster regressions for dense titles, tinted compression stripes, real coloured borders, off-center columns, and explicit end times beyond a printed row end. Course wording still requires review.
+
 ### Version 48 — Public Omnivox timetable regression coverage
 
 - Tested five distinct public Omnivox timetables from LaSalle/LCI guides, Sainte-Foy and Trois-Rivières, across nine image variants. Eight variants reproduced all visible busy intervals. The remaining tiny, annotated guide-page screenshot still fails with a clear error; its original embedded timetable image works.
