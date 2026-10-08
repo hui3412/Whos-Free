@@ -356,7 +356,7 @@ input[type="time"]:disabled {
 
 .people-list {
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
   scrollbar-gutter: stable;
   padding: 1px 11px 11px;
   flex: 1;
