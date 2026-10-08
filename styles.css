@@ -2383,6 +2383,9 @@ button:disabled { cursor: not-allowed; }
 .people-actions .live-control { font-size: .82rem; gap: 6px; min-height: 42px; }
 .people-actions .view-icon-button { min-height: 42px; min-width: 42px; }
 .people-actions .view-mode-button { width: auto; padding: 0 11px; }
+.group-view-controls { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.people-actions #manageGroupsButton { min-height: 42px; padding: 0 11px; font-size: .82rem; }
+#manageGroupsButton[hidden] { display: none; }
 .count-badge { min-height: 0; padding: 0; background: transparent; color: var(--muted); font-weight: 400; }
 .status-line { padding: 12px 0; font-size: .82rem; line-height: 1.5; }
 .availability-summary {

@@ -180,7 +180,7 @@ test("PDF and JSON tools are closed behind a bottom menu without moving the earl
   const receiver = await app(null);
   try {
     const titles = [...receiver.el("scheduleModal").querySelectorAll(':scope > section > .schedule-action-section')].map(e => e.getAttribute("aria-labelledby"));
-    assert.deepEqual(titles, ["scheduleGroupsTitle", "addPictureTitle", "imageReviewTitle", "shareCodeTitle", "peopleManagerTitle"]);
+    assert.deepEqual(titles, ["addPictureTitle", "imageReviewTitle", "shareCodeTitle", "peopleManagerTitle"]);
     const menu = receiver.el("advancedScheduleOptions");
     assert.equal(menu.open, false);
     assert.equal(menu.parentElement.lastElementChild, menu);
