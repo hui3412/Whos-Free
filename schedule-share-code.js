@@ -7,6 +7,7 @@
   const FIELDS = ["course", "course_code", "section", "room", "instructor"];
   const MAX_BYTES = 1048576;
   const MAX_CODE = 1800000;
+  const STEPS = [1, 5, 15, 30, 60];
   const normalizedName = name => name.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
   const time = value => {
     if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) return NaN;
@@ -126,48 +127,209 @@
     validatePayload(payload);
     return payload;
   }
-  function wrap(bytes, mode) {
+  function packBinary(payload, variant) {
+    // Try literal labels, shared strings, and recurring class patterns. Keep row
+    // order and exact minutes; the selected time unit must divide every time.
+    const rows = payload.p.flatMap(person => person.c);
+    const step = [...STEPS].reverse().find(unit => rows.every(row => time(row[1]) % unit === 0 && (time(row[2]) - time(row[1])) % unit === 0));
+    const out = [];
+    const byte = value => {
+      if (out.length >= MAX_BYTES) throw new Error("Binary selection is too large.");
+      out.push(value);
+    };
+    const integer = value => {
+      do { const next = value % 128; value = Math.floor(value / 128); byte(next | (value ? 128 : 0)); } while (value);
+    };
+    const string = value => {
+      const bytes = new TextEncoder().encode(value);
+      // UTF-8 replaces lone surrogates. Let the JSON candidate preserve them.
+      if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== value) throw new Error("Use JSON for this label.");
+      integer(bytes.length); for (const value of bytes) byte(value);
+    };
+    const strings = [], ids = new Map();
+    if (variant) for (const row of rows) for (const label of row.slice(3, 8)) {
+      if (label && !ids.has(label)) { ids.set(label, strings.length); strings.push(label); }
+    }
+    const labels = row => {
+      const mask = FIELDS.reduce((mask, _, i) => mask | (row[i + 3] ? 1 << i : 0), row[8] === "busy_block" ? 32 : 0);
+      byte(mask);
+      for (let i = 0; i < FIELDS.length; i++) if (mask & (1 << i)) {
+        if (variant) integer(ids.get(row[i + 3])); else string(row[i + 3]);
+      }
+    };
+    const patternKey = row => JSON.stringify([time(row[1]), time(row[2]), ...FIELDS.map((_, i) => row[i + 3] || null), row[8] || null]);
+    const patterns = [], patternIds = new Map();
+    byte(variant | (STEPS.indexOf(step) << 2));
+    if (variant) { integer(strings.length); for (const label of strings) string(label); }
+    if (variant === 2) {
+      for (const row of rows) {
+        const key = patternKey(row);
+        if (!patternIds.has(key)) { patternIds.set(key, patterns.length); patterns.push(row); }
+      }
+      integer(patterns.length);
+      for (const row of patterns) {
+        integer(time(row[1]) / step); integer((time(row[2]) - time(row[1])) / step); labels(row);
+      }
+    }
+    integer(payload.p.length);
+    for (const person of payload.p) {
+      string(person.n);
+      integer(person.s === undefined ? 0 : person.s === null ? 1 : 2 + (Number(person.s.slice(-4)) - 2000) * 2 + (person.s.startsWith("Fall") ? 1 : 0));
+      integer(person.c.length);
+      const previous = DAYS.map(() => 480 / step);
+      for (const row of person.c) {
+        if (variant === 2) integer(patternIds.get(patternKey(row)) * 8 + row[0]);
+        else {
+          const start = time(row[1]) / step, delta = start - previous[row[0]];
+          integer((delta < 0 ? -delta * 2 - 1 : delta * 2) * 8 + row[0]);
+          previous[row[0]] = start;
+          integer((time(row[2]) - time(row[1])) / step); labels(row);
+        }
+      }
+    }
+    return Uint8Array.from(out);
+  }
+  function unpackBinary(bytes) {
+    const invalid = () => { throw new Error("This code does not contain valid schedule data."); };
+    let offset = 0;
+    const byte = () => { if (offset >= bytes.length) invalid(); return bytes[offset++]; };
+    const integer = max => {
+      let value = 0;
+      for (let i = 0; i < 4; i++) {
+        const next = byte(); value += (next & 127) * 2 ** (7 * i);
+        if (next < 128) { if (value > max || (i && next === 0)) invalid(); return value; }
+      }
+      invalid();
+    };
+    const string = () => {
+      const length = integer(600);
+      if (offset + length > bytes.length) invalid();
+      let value;
+      try { value = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(offset, offset + length)); } catch { invalid(); }
+      offset += length; if (value.length > 200) invalid(); return value;
+    };
+    const header = byte(), variant = header & 3, step = STEPS[header >> 2];
+    if (variant > 2 || !step) invalid();
+    const strings = [];
+    if (variant) { const count = integer(50000); for (let i = 0; i < count; i++) strings.push(string()); }
+    const labels = () => {
+      const mask = byte(); if (mask > 63) invalid();
+      return [...FIELDS.map((_, i) => {
+        if (!(mask & (1 << i))) return null;
+        if (!variant) return string();
+        if (!strings.length) invalid();
+        return strings[integer(strings.length - 1)];
+      }), mask & 32 ? "busy_block" : null];
+    };
+    const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    const row = (day, start, duration, details) => {
+      start *= step; duration *= step;
+      if (day > 6 || start < 0 || duration < 1 || start + duration > 1439) invalid();
+      return [day, clock(start), clock(start + duration), ...details];
+    };
+    const patterns = [];
+    if (variant === 2) {
+      const count = integer(10000);
+      for (let i = 0; i < count; i++) {
+        const start = integer(1439), duration = integer(1439), details = labels();
+        row(0, start, duration, details); patterns.push({ start, duration, details });
+      }
+    }
+    const count = integer(250); if (!count) invalid();
+    const people = []; let total = 0;
+    for (let i = 0; i < count; i++) {
+      const name = string(), semester = integer(201), entries = integer(500);
+      total += entries; if (total > 10000) invalid();
+      const person = { n: name, ...(semester ? { s: semester === 1 ? null : `${(semester - 2) % 2 ? "Fall" : "Winter"} ${2000 + Math.floor((semester - 2) / 2)}` } : {}), c: [] };
+      const previous = DAYS.map(() => 480 / step);
+      for (let j = 0; j < entries; j++) {
+        if (variant === 2) {
+          if (!patterns.length) invalid();
+          const token = integer(patterns.length * 8 - 1), pattern = patterns[Math.floor(token / 8)];
+          person.c.push(row(token & 7, pattern.start, pattern.duration, pattern.details));
+        } else {
+          const token = integer(23031), day = token & 7;
+          if (day > 6) invalid();
+          const delta = Math.floor(token / 8), start = previous[day] + (delta % 2 ? -(delta + 1) / 2 : delta / 2);
+          previous[day] = start;
+          const duration = integer(1439); person.c.push(row(day, start, duration, labels()));
+        }
+      }
+      people.push(person);
+    }
+    if (offset !== bytes.length) invalid();
+    const payload = { v: 1, p: people }; validatePayload(payload); return payload;
+  }
+  function wrap(bytes, mode, version = 2) {
     const checked = new Uint8Array(bytes.length + 4);
     new DataView(checked.buffer).setUint32(0, checksum(bytes), true);
     checked.set(bytes, 4);
-    return `WF2${mode}${base14(checked)}`;
+    return `WF${version}${mode}${base14(checked)}`;
   }
   async function encode(data) {
-    let bytes = new TextEncoder().encode(JSON.stringify(packCompact(pack(data))));
+    const payload = pack(data);
+    let bytes = new TextEncoder().encode(JSON.stringify(packCompact(payload)));
     if (bytes.length > MAX_BYTES) throw new Error("This selection is too large. Export fewer schedules at once.");
+    const candidates = [{ bytes, modes: ["J", "D", "Z"] }];
+    for (let variant = 0; variant < 3; variant++) {
+      try { candidates.push({ bytes: packBinary(payload, variant), modes: ["B", "R", "S"] }); }
+      catch { /* JSON preserves unusual Unicode and stays available at size limits. */ }
+    }
     let mode = "J";
-    if (typeof CompressionStream === "function") {
-      for (const [format, marker] of [["deflate-raw", "D"], ["deflate", "Z"]]) {
+    for (const candidate of candidates) {
+      if (candidate.bytes.length < bytes.length) { bytes = candidate.bytes; mode = candidate.modes[0]; }
+      if (typeof CompressionStream !== "function") continue;
+      for (const [i, format] of ["deflate-raw", "deflate"].entries()) {
         try {
-          const compressed = await transform(bytes, CompressionStream, format);
-          if (compressed.length < bytes.length) { bytes = compressed; mode = marker; }
+          const compressed = await transform(candidate.bytes, CompressionStream, format);
+          if (compressed.length < bytes.length) { bytes = compressed; mode = candidate.modes[i + 1]; }
           break;
-        } catch { /* Try the older standard format; keep compact text as a fallback. */ }
+        } catch { /* Older browsers can use wrapped DEFLATE or uncompressed data. */ }
       }
     }
-    const code = wrap(bytes, mode);
+    const code = wrap(bytes, mode, 3);
     if (code.length > MAX_CODE) throw new Error("This selection is too large. Export fewer schedules at once.");
     return code;
   }
   async function decode(input) {
     if (typeof input !== "string" || input.length > MAX_CODE) throw new Error("This code is too large. Ask for fewer schedules in one code.");
     const code = input.replace(/\s+/g, "");
-    if (code.startsWith("WF1")) throw new Error("This is an old export code. Ask your friend to export the schedules again to create a shorter code.");
-    if (!/^WF2[JDZ][0-6][\u4e00-\u8dff]+$/.test(code)) throw new Error("That is not a valid Who’s Free? export code. Paste the full code from your friend.");
-    const checked = unbase14(code.slice(4));
-    if (checked.length < 4) throw new Error("The code is incomplete or changed.");
-    let bytes = checked.subarray(4);
-    if (checksum(bytes) !== new DataView(checked.buffer).getUint32(0, true)) throw new Error("The code is incomplete or changed. Ask your friend to copy it again.");
-    if (code[3] !== "J") {
+    const decompress = async (bytes, format) => {
       if (typeof DecompressionStream !== "function") throw new Error("Your browser cannot open this compressed code. Update Safari or use a recent Chrome or Firefox.");
-      try { bytes = await transform(bytes, DecompressionStream, code[3] === "D" ? "deflate-raw" : "deflate"); }
+      try { return await transform(bytes, DecompressionStream, format); }
       catch (error) { throw new Error(error.message.includes("too large") ? error.message : "The compressed code could not be opened. Ask for a new export code."); }
+    };
+    const json = bytes => {
+      try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
+      catch { throw new Error("This code does not contain readable schedule data."); }
+    };
+    let payload;
+    if (code.slice(0, 3).toUpperCase() === "WF1") {
+      // Restore the original alphanumeric format as well as keeping WF2.
+      const legacy = code.toUpperCase(), alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+      if (!/^WF1[GJ][0-9A-F]{8}[A-Z2-7]+$/.test(legacy)) throw new Error("That is not a valid Who’s Free? export code. Paste the full code from your friend.");
+      const text = legacy.slice(12), length = Math.floor(text.length * 5 / 8);
+      if (!length || length > MAX_BYTES) throw new Error("This code is too large. Ask for fewer schedules in one code.");
+      let bytes = new Uint8Array(length), bits = 0, buffer = 0, offset = 0;
+      for (const character of text) {
+        buffer = (buffer << 5) | alphabet.indexOf(character); bits += 5;
+        if (bits >= 8) { bits -= 8; bytes[offset++] = (buffer >>> bits) & 255; }
+        buffer &= (1 << bits) - 1;
+      }
+      if (buffer || Math.ceil(length * 8 / 5) !== text.length || checksum(bytes).toString(16).padStart(8, "0").toUpperCase() !== legacy.slice(4, 12)) throw new Error("The code is incomplete or changed. Ask your friend to copy it again.");
+      if (legacy[3] === "G") bytes = await decompress(bytes, "gzip");
+      payload = json(bytes); validatePayload(payload);
+    } else {
+      if (!/^WF(?:2[JDZ]|3[JDZBRS])[0-6][\u4e00-\u8dff]+$/.test(code)) throw new Error("That is not a valid Who’s Free? export code. Paste the full code from your friend.");
+      const checked = unbase14(code.slice(4));
+      if (checked.length < 4) throw new Error("The code is incomplete or changed.");
+      let bytes = checked.subarray(4);
+      if (checksum(bytes) !== new DataView(checked.buffer).getUint32(0, true)) throw new Error("The code is incomplete or changed. Ask your friend to copy it again.");
+      if ("DR".includes(code[3])) bytes = await decompress(bytes, "deflate-raw");
+      else if ("ZS".includes(code[3])) bytes = await decompress(bytes, "deflate");
+      if (bytes.length > MAX_BYTES) throw new Error("This code is too large. Ask for fewer schedules in one code.");
+      payload = "BRS".includes(code[3]) ? unpackBinary(bytes) : unpackCompact(json(bytes));
     }
-    if (bytes.length > MAX_BYTES) throw new Error("This code is too large. Ask for fewer schedules in one code.");
-    let compact;
-    try { compact = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
-    catch { throw new Error("This code does not contain readable schedule data."); }
-    const payload = unpackCompact(compact);
     const people = Object.create(null);
     for (const person of payload.p) {
       people[person.n] = { source_file: "Shared code", ...(person.s !== undefined ? { semester: person.s } : {}), classes: person.c.map(row => ({
@@ -223,5 +385,6 @@
     }
     return { data: { ...(existing || {}), schema_version: existing?.schema_version || 1, people }, added, replaced, skipped, kept, renamed };
   }
-  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, sameSchedule } };
+  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, sameSchedule, pack, packBinary, unpackBinary } };
 })();
+

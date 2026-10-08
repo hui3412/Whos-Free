@@ -20,7 +20,7 @@ function crafted(payload, compressed = false) {
 
 test("a standalone Unicode code preserves Unicode, weekends, busy labels and empty schedules", async () => {
   const code = await api.encode(data);
-  assert.match(code, /^WF2[DJZ][0-6][\u4e00-\u8dff]+$/);
+  assert.match(code, /^WF3[DJZBRS][0-6][\u4e00-\u8dff]+$/);
   assert.equal([...code].length, code.length, "one UTF-16 code unit per visible character");
   const decoded = await api.decode(code.normalize("NFC").replace(/(.{40})/g, "$1\n"));
   assert.deepEqual(Object.keys(decoded.people), Object.keys(data.people));
@@ -36,9 +36,9 @@ test("compression reduces message size; uncompressed fallback can be read by the
   const collection = { people: { Person: { classes: Array.from({ length: 30 }, () => ({ ...classItem })) } } };
   const compressed = await api.encode(collection);
   const uncompressed = await codec(false).encode(collection);
-  assert.match(compressed, /^WF2D/);
-  assert.match(uncompressed, /^WF2J/);
-  assert.ok(compressed.length < uncompressed.length / 2);
+  assert.match(compressed, /^WF3[DR]/);
+  assert.match(uncompressed, /^WF3[JB]/);
+  assert.ok(compressed.length < uncompressed.length);
   assert.deepEqual(plain(await api.decode(compressed)), plain(await api.decode(uncompressed)));
 });
 
@@ -128,14 +128,14 @@ test("replace and keep old retain the canonical name; failed batches leave input
 test("damaged, unsupported and malformed codes fail without yielding schedules", async () => {
   const code = await api.encode(data);
   await assert.rejects(api.decode(""), /not a valid/);
-  await assert.rejects(api.decode(code.replace(/^WF2/, "WF9")), /not a valid/);
+  await assert.rejects(api.decode(code.replace(/^WF3/, "WF9")), /not a valid/);
   await assert.rejects(api.decode(code.slice(0, -4)), /incomplete|changed/);
   await assert.rejects(api.decode(code.slice(0, 12) + "!" + code.slice(13)), /not a valid/);
   await assert.rejects(api.decode(crafted("not JSON")), /readable/);
   await assert.rejects(api.decode(crafted('[["Bad",[[0,720,-60]]]]')), /valid schedule data/);
   await assert.rejects(api.decode(crafted('[["Bad",[]],["bad",[]]]')), /repeated/);
   await assert.rejects(api.encode({ people: {} }), /supported schedule/);
-  await assert.rejects(api.decode("WF1G01234567OLD"), /old export code/);
+  await assert.rejects(api.decode("WF1G01234567OLD"), /incomplete|changed/);
   await assert.rejects(api.decode(code.toLowerCase()), /not a valid/);
   const index = 20;
   const changed = code.slice(0, index) + String.fromCharCode(0x4e00 + ((code.charCodeAt(index) - 0x4e00 + 1) % 16384)) + code.slice(index + 1);
@@ -174,7 +174,7 @@ test("raw and wrapped compression have the same portable result", async () => {
   vm.runInContext(source, context);
   const collection = { people: { Person: { classes: Array.from({ length: 30 }, () => ({ ...classItem })) } } };
   const code = await context.WhosFreeShareCode.encode(collection);
-  assert.match(code, /^WF2Z/);
+  assert.match(code, /^WF3[ZS]/);
   assert.deepEqual(plain(await api.decode(code)), plain(await api.decode(await api.encode(collection))));
   const unavailable = vm.createContext({ TextEncoder, TextDecoder, Blob, Uint8Array });
   vm.runInContext(source, unavailable);
@@ -197,3 +197,4 @@ test("compact payload rejects invalid flags, fractions, labels and oversized col
   await assert.rejects(api.decode(crafted(JSON.stringify(Array(251).fill(["Bad",[]])))), /valid schedule data/);
   await assert.rejects(api.decode(api.__test.wrap(deflateSync(Buffer.from("not JSON")), "D")), /could not be opened/);
 });
+

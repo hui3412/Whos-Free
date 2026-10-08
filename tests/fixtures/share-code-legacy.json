@@ -1,0 +1,41 @@
+{
+  "data": {
+    "schema_version": 1,
+    "people": {
+      "Élodie": {
+        "semester": "Fall 2026",
+        "classes": [
+          {
+            "day": "Monday",
+            "start": "08:15",
+            "end": "09:35",
+            "course": "Calcul différentiel",
+            "course_code": "201-SN2-RE",
+            "section": "00001",
+            "room": "A-104",
+            "instructor": "名字",
+            "kind": "class"
+          },
+          {
+            "day": "Saturday",
+            "start": "16:15",
+            "end": "19:15",
+            "course": "Sport",
+            "kind": "busy_block"
+          }
+        ]
+      },
+      "No semester": {
+        "semester": null,
+        "classes": []
+      }
+    }
+  },
+  "codes": {
+    "wf1Plain": "WF1J7E504F21PMRHMIR2GEWCE4BCHJNXWITOEI5CFQ4JNRXWI2LFEIWCEYZCHJNVWMBMEIYDQORRGURCYIRQHE5DGNJCFQREGYLMMN2WYIDENFTGNQ5JOJSW45DJMVWCELBCGIYDCLKTJYZC2USFEIWCEMBQGAYDCIRMEJAS2MJQGQRCYIXFSCG6LLMXEJOSYWZVFQRDCNR2GE2SELBCGE4TUMJVEIWCEU3QN5ZHIIRMNZ2WY3BMNZ2WY3BMNZ2WY3BMNZ2WY3BMEJRHK43ZL5RGY33DNMRF2XL5FR5SE3RCHIRE43ZAONSW2ZLTORSXEIRMEJRSEOS3LV6V27I",
+    "wf1Gzip": "WF1G35DD6CC3D6FQQAAAAAAAAAADLWHE2CUCKAMELNZCO76ATX5LRR6LHCFGBZZCRD2IPWBPJ4UJH5AYQC3ICA2GWDINLKCWW4I7EE3GU4WP4RZDQHNOSCBFAQSGDUFEQDDXMPJVZA4QIBDBCE3YEOCQOAX3OI4XC5ZSJFVZYNGPWLQV32NCZG2QCYOBYIGYHBL33BHV6ZQWEBWF3QJLCDDOOY74XSQCR4QIMI6QXBJ7GMWG3VMARLLJR72B3TLLOY3MNRZIMUR5ZWGYC5LKPXIXLI5LL6T6UVP7AUQU6UD6ZQAAAAA",
+    "wf2Plain": "WF2J3囫炤坭椢绢擆讑睥嚋厵竀稴屍惃滀稢廘擆寕稠朚摦椎睲杛畆玕稢夈焣仄筓憌烕圔瀬嚌儃什缢夈爒苄縴嚋倮摂寥祥耥花椱嫋冓櫔稱尌僂坍繯檝倥荴稢徘擆纀耰媍瀥花椢憛耇宕筥櫝呗嚈穛敋哧掱穝敀",
+    "wf2Raw": "WF2D0涉娨穗娻冠爁帗庭爖菹囜熨猡璄犇獤傈爴姈勃柄形柚糁纕椁槙濨懣电灻棗楀埑媙柊盄喚擝枣粛枮拮剮梠蘫例炲稼浐缉勄渎婔晈廫賭淣见艦翻圍垱懹蠡纝虎敊孬琯橭俑忘覈毄堃蠏妵畗褿",
+    "wf2Wrapped": "WF2Z4蜜埂蟢樕脎绨圀戅舫朅签怷囪坈枡圡蝙亢圍僲估葱剘瑶禰樥擀擶智勸蟍暞蒵蓐側愦摲砱俦玷摨覦葫猻漛璨尊繢蚬礏嗔婂弱嘃焕吒刺趻旸賰欙穾聃恬拾沈樧氓珒煛型蔛年扶峢啱傀貃胭柕賏蔡庯匀"
+  }
+}
