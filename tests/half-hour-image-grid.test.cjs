@@ -82,6 +82,106 @@ function pixelCanvas(width, height, pixel) {
   } }; } };
 }
 
+test("missing duplicate OCR labels use independent time-gutter borders, not guessed times", () => {
+  const labels = markers().filter((item, index) => index === 0 || index % 2 === 1);
+  assert.throws(() => helpers.timeGrid(labels, 94), /shared timetable boundaries/);
+  const canvas = pixelCanvas(705, 800, (_x, y) => y >= 100 && y <= 700 && (y - 100) % 30 === 0 ? [210, 210, 210] : [255, 255, 255]);
+  const column = { left: 100, right: 200, width: 100 };
+  const grid = helpers.timeGrid(labels, 94, { canvas, column });
+  assert.equal(grid.boundaryValidated, true);
+  assert.equal(grid.top, 100);
+  assert.equal(grid.bottom, 700);
+  assert.equal(grid.items[0].text, "08:00");
+  assert.equal(grid.items.at(-1).text, "18:00");
+  assert.equal(grid.rowHeight, 30);
+  const missingEarly = helpers.timeGrid(labels.filter(item => item.text >= "09:00"), 94, { canvas, column });
+  assert.equal(missingEarly.top, 100);
+  assert.equal(missingEarly.items[0].text, "08:00");
+});
+
+test("border validation rejects middle-of-row configuration labels and inconsistent clocks", () => {
+  const canvas = pixelCanvas(705, 800, (_x, y) => y >= 100 && y <= 700 && (y - 100) % 30 === 0 ? [210, 210, 210] : [255, 255, 255]);
+  const column = { left: 100, right: 200, width: 100 };
+  const labels = Array.from({ length: 20 }, (_, index) => word(clock(480 + index * 30), 50, 112 + index * 30, 80, 118 + index * 30));
+  assert.throws(() => helpers.timeGrid(labels, 94, { canvas, column }), /shared timetable boundaries/);
+  const badClocks = markers().filter((_, index) => index % 2 === 1).map((item, index) => ({ ...item, text: clock(480 + index * (index % 2 ? 60 : 30)) }));
+  assert.throws(() => helpers.timeGrid(badClocks, 94, { canvas, column }));
+  assert.throws(() => helpers.timeGrid(markers().slice(0, 7), 94, { canvas, column }), /enough time labels/);
+});
+
+test("retry patch restores original coordinates and cleans up after OCR failures", async () => {
+  const patches = [];
+  const context = load({ createElement() {
+    const patch = { width: 0, height: 0, getContext() { return {
+      fillRect() {}, drawImage() {},
+      getImageData(_x, _y, width, height) { return { data: new Uint8ClampedArray(width * height * 4).fill(255) }; },
+      putImageData() {}
+    }; } };
+    patches.push(patch);
+    return patch;
+  } });
+  const rectangle = { left: 30, top: 40, width: 50, height: 100, textHeight: 8 };
+  const patch = context.WhosFreeImageParser.__test.recognitionPatch({}, rectangle, { contrast: true, removeRules: true });
+  assert.equal(patch.canvas.width, 174);
+  assert.equal(patch.canvas.height, 324);
+  const restored = patch.restore(word("08:00", 12 + 10 * 3, 12 + 20 * 3, 12 + 30 * 3, 12 + 28 * 3));
+  assert.equal(restored.x0, 40);
+  assert.equal(restored.y0, 60);
+  assert.equal(restored.height, 8);
+  const worker = { async setParameters() {}, async recognize() { throw new Error("retry failed"); } };
+  await assert.rejects(context.WhosFreeImageParser.__test.patchWords(worker, {}, rectangle, 1, {}, {}), /retry failed/);
+  assert.equal(patches.at(-1).width, 1);
+  assert.equal(patches.at(-1).height, 1);
+});
+
+test("full pipeline retries layout, both time-column methods and empty class text", async () => {
+  const canvases = [], calls = [], parameters = [];
+  let terminated = false;
+  const headers = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((text, index) => word(text, 130 + index * 100, 80, 170 + index * 100, 94));
+  const context = load({ baseURI: "https://example.test/", createElement(type) {
+    if (type === "script") return {};
+    const canvas = pixelCanvas(1, 1, (x, y) => {
+      const sourceX = x + 15, sourceY = y + 75;
+      if (sourceY >= 100 && sourceY <= 700 && (sourceY - 100) % 30 === 0) return [225, 225, 225];
+      if (sourceX > 120 && sourceX < 150 && sourceY > 110 && sourceY < 125) return [30, 30, 30];
+      return [255, 255, 255];
+    });
+    const getContext = canvas.getContext;
+    canvas.getContext = () => ({ ...getContext(), drawImage() {}, fillRect() {}, putImageData() {} });
+    canvases.push(canvas);
+    return canvas;
+  }, head: { append(script) { queueMicrotask(() => script.onload()); } } });
+  const data = items => ({ data: { blocks: [{ paragraphs: [{ lines: [{ words: items.map(item => ({ text: item.text, bbox: { x0: item.x0, x1: item.x1, y0: item.y0, y1: item.y1 }, confidence: 95 })) }] }] }] } });
+  context.Tesseract = { async createWorker() { return {
+    async setParameters(value) { parameters.push(value); },
+    async recognize(canvas, options) {
+      calls.push({ canvas, options });
+      if (calls.length === 1) return data([]);
+      if (calls.length === 2) return data(headers);
+      if (calls.length <= 4) return data([]); // Raw gutter and sparse retry miss the axis.
+      if (calls.length === 5) {
+        const fx = (canvas.width - 24) / 73, fy = (canvas.height - 24) / 906;
+        return data(markers().map(item => word(item.text, 12 + (item.x0 - 30) * fx, 12 + (item.y0 - 94) * fy, 12 + (item.x1 - 30) * fx, 12 + (item.y1 - 94) * fy)));
+      }
+      if (calls.length === 6) return data([]);
+      return data([word("Workshop", 20, 20, 60, 35)]);
+    },
+    async terminate() { terminated = true; }
+  }; } };
+  const result = await context.WhosFreeImageParser.parseScheduleCanvas({ width: 705, height: 1000 }, "test.png");
+  assert.equal(result.person.classes.length, 1);
+  assert.equal(result.person.classes[0].start, "08:00");
+  assert.equal(result.person.classes[0].end, "08:30");
+  assert.equal(parameters[1].tessedit_pageseg_mode, "3");
+  assert.equal(parameters[3].tessedit_pageseg_mode, "11");
+  assert.equal(parameters[4].tessedit_pageseg_mode, "6");
+  assert.equal(parameters[5].tessedit_char_whitelist, "");
+  assert.equal(parameters[6].tessedit_pageseg_mode, "11");
+  assert.equal(parameters[7].tessedit_pageseg_mode, "6");
+  assert.equal(terminated, true);
+  assert.ok(canvases.every(canvas => canvas.width === 1 && canvas.height === 1));
+});
+
 test("coloured cells keep shared borders and ignore non-grid lines and footer content", () => {
   const canvas = pixelCanvas(705, 300, (_x, y) => {
     if ([40, 85, 100, 160, 220].includes(y)) return [215, 215, 215];

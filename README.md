@@ -11,7 +11,7 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 ### Summary
 
 - **Cleaner design:** Subtle filled backgrounds, compact mobile controls and automatic scrolling to newly opened panels.
-- **Image recognition:** On-device English/French OCR for timetable screenshots, including repeated half-hour boundary labels, hourly start/end rows, abbreviated dated weekday headings and coloured class blocks, with warnings for uncertain detections.
+- **Image recognition:** On-device English/French OCR for timetable screenshots, including repeated half-hour boundary labels, hourly start/end rows, abbreviated dated weekday headings and coloured class blocks, with independent retries and warnings for uncertain detections.
 - **Timetable editor:** Create schedules manually or correct imported and saved schedules in a seven-day grid.
 - **Availability:** Check now or preview another time, including weekends, with real breaks and next-class details.
 - **Groups:** Overlapping memberships, live free counts, shared-break suggestions and weekly availability.
@@ -38,6 +38,17 @@ These three milestones group the completed work chronologically; their labels ar
 - These checks cover busy times, not perfect transcription. Small, blurry or annotated pictures can still fail or produce uncertain wording; always compare the review grid with the picture before saving. OCR remains on-device.
 
 Public sources: [LaSalle English guide](https://dam.lcieducation.com/1fizm6CngLhkF2on733ugFS68_sODU5MDI0NDlhMGRjNDFm/Guide_utilisation_Omnivox_EN.pdf), [LaSalle French guide](https://cdn.lcieducation.com/-/media/files/montreal/students-resources/guide_utilisation_omnivox_fr.pdf), [LCI Melbourne guide](https://cdn.lcieducation.com/-/media/files/melbourne/omnivox-guide/omnivox-lci-melbourne-guide.pdf%3Fla=en&rev=fa082abc9ea74c6b8ef929d7e8a486b9), [Sainte-Foy printable example](https://www.fichier-pdf.fr/2012/01/16/omnivox-cegep-de-sainte-foy/), and [Trois-Rivières timetable examples](https://www.cegeptr.qc.ca/horaire/).
+
+### Reader 50 — Validated on-device fallbacks
+
+October 8, 2026
+
+- Reproduced a supplied phone screenshot failing in the deployed browser even though the matching native OCR test passed. Browser imports are now included in verification; matching OCR engine/model versions alone do not guarantee identical rasterization or results.
+- Added a second layout-reading mode, focused/enlarged heading retries, and independent sparse/contrast-enhanced time-gutter retries. Temporary retry canvases are bounded and released immediately.
+- Added a second half-hour axis method: at least eight distinct readable clock labels must agree with a consistent lattice of visible time-gutter borders. This handles omitted duplicate boundary labels without manufacturing OCR observations. Middle-of-row configuration labels and inconsistent clocks remain rejected.
+- Retry empty/low-quality class text, keeping one complete OCR pass rather than mixing conflicting course codes. Unreadable individual busy spans remain editable; pictures where most detected blocks remain unreadable are rejected instead of presenting a mostly unverified schedule.
+- Label border-recovered times for review, add reader/stage information to errors, and time out stalled OCR jobs. Picture imports release the large source canvas after cropping the timetable to reduce peak retained memory.
+- No remote OCR, new external service, or schedule-file upload was added. The existing review/confirmation, name-entry, editing and scrolling flows are preserved.
 
 ### Version 12.1 — Image recognition and timetable editing
 
