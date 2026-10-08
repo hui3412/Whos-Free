@@ -8,6 +8,46 @@
   const MAX_BYTES = 1048576;
   const MAX_CODE = 1800000;
   const STEPS = [1, 5, 15, 30, 60];
+  // WF4 token IDs are permanent. Changing this order would corrupt old codes.
+  const WORDS = Object.freeze([
+    "Differential Calculus", "General Chemistry", "Introduction to College",
+    "Cellular Biology", "Calcul différentiel", "Chimie générale",
+    "Probability and Stat", "Programming in Scien", "Renforcement en fran",
+    "Oeuvres narratives e", "North American Selec", "Introduction to Coll",
+    "Introduction to", "Calculus", "calculus", "Calcul", "Chemistry", "Biology",
+    "Mechanics", "Mécanique", "Mathematics", "Mathématiques", "Physics",
+    "Physique", "English", "French", "History", "Philosophy", "Psychology",
+    "Psychologie", "Literature"
+  ]);
+  const wordPattern = new RegExp(`(^|[^\\p{L}\\p{N}\\p{M}_])(${[...WORDS].sort((a, b) => b.length - a.length).join("|")})(?=$|[^\\p{L}\\p{N}\\p{M}_])`, "gu");
+  function tokenize(value) {
+    return value.replace(/[\u0000-\u001f]/g, char => "\0" + char).replace(wordPattern, (_, before, word) => before + String.fromCharCode(WORDS.indexOf(word) + 1));
+  }
+  function untokenize(value) {
+    let result = "";
+    for (let i = 0; i < value.length; i++) {
+      const token = value.charCodeAt(i);
+      if (token === 0) {
+        if (++i >= value.length || value.charCodeAt(i) > 31) throw new Error("Invalid dictionary escape.");
+        result += value[i];
+      } else result += token <= 31 ? WORDS[token - 1] : value[i];
+      if (result.length > 200) throw new Error("Expanded label is too long.");
+    }
+    return result;
+  }
+  function familyName(value) {
+    if (typeof value !== "string" || !value.trim()) return value || null;
+    const surname = name => {
+      if (name.includes(",")) return name.split(",")[0].trim();
+      const parts = name.trim().split(/\s+/);
+      let start = parts.length - 1;
+      const particles = /^(?:de|del|della|di|da|dos|das|du|des|van|von|den|der|ter|ten|la|le|el|al|bin|ibn|st\.?|saint)$/i;
+      while (start > 0 && particles.test(parts[start - 1])) start--;
+      return parts.slice(start).join(" ");
+    };
+    // Keep separately listed instructors and hyphenated surnames intact.
+    return value.split(/\s*(?:\/|;|&)\s*|\s+(?:and|et)\s+/).map(surname).filter(Boolean).join("/") || null;
+  }
   const normalizedName = name => name.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
   const time = value => {
     if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) return NaN;
@@ -87,11 +127,11 @@
       }
     }
   }
-  function pack(data) {
+  function pack(data, compact = false) {
     if (!data?.people || typeof data.people !== "object" || Array.isArray(data.people)) throw new Error("Select schedules to export.");
     const payload = { v: 1, p: Object.entries(data.people).map(([name, person]) => ({
       n: name, ...(person.semester !== undefined ? { s: person.semester } : {}), c: (person.classes || []).map(item => {
-        const row = [DAYS.indexOf(item.day), item.start, item.end, ...FIELDS.map(key => item[key] || null), item.kind === "busy_block" ? "busy_block" : null];
+        const row = [DAYS.indexOf(item.day), item.start, item.end, ...FIELDS.map(key => compact && (key === "course_code" || key === "section") ? null : compact && key === "instructor" ? familyName(item[key]) : item[key] || null), item.kind === "busy_block" ? "busy_block" : null];
         while (row.length > 3 && row[row.length - 1] == null) row.pop();
         return row;
       }),
@@ -99,16 +139,16 @@
     validatePayload(payload);
     return payload;
   }
-  function packCompact(payload) {
+  function packCompact(payload, slim = false) {
     // Numeric times and durations reduce repeated punctuation. Keep every label
     // intact: compression handles repeated courses without a course dictionary.
     return payload.p.map(person => [person.n, person.c.map(row => {
-      const compact = [row[0] | (row[8] === "busy_block" ? 8 : 0), time(row[1]), time(row[2]) - time(row[1]), ...row.slice(3, 8)];
+      const compact = [row[0] | (row[8] === "busy_block" ? 8 : 0), time(row[1]), time(row[2]) - time(row[1]), ...(slim ? [row[3], row[6], row[7]] : row.slice(3, 8))];
       while (compact.length > 3 && compact[compact.length - 1] == null) compact.pop();
       return compact;
     }), ...(person.s !== undefined ? [person.s] : [])]);
   }
-  function unpackCompact(compact) {
+  function unpackCompact(compact, slim = false) {
     const invalid = () => { throw new Error("This code does not contain valid schedule data."); };
     if (!Array.isArray(compact) || !compact.length || compact.length > 250) invalid();
     let count = 0;
@@ -117,17 +157,17 @@
       if (!Array.isArray(person) || person.length < 2 || person.length > 3 || !Array.isArray(person[1]) || person[1].length > 500) invalid();
       count += person[1].length; if (count > 10000) invalid();
       return { n: person[0], ...(person.length === 3 ? { s: person[2] } : {}), c: person[1].map(row => {
-        if (!Array.isArray(row) || row.length < 3 || row.length > 8) invalid();
+        if (!Array.isArray(row) || row.length < 3 || row.length > (slim ? 6 : 8)) invalid();
         const [day, start, duration] = row;
         if (!Number.isInteger(day) || day < 0 || day > 14 || (day & 7) > 6 || !Number.isInteger(start) || start < 0 || !Number.isInteger(duration) || duration <= 0 || start + duration > 1439) invalid();
-        return [day & 7, clock(start), clock(start + duration), ...FIELDS.map((_, i) => row[i + 3] ?? null), day & 8 ? "busy_block" : null];
+        return [day & 7, clock(start), clock(start + duration), ...(slim ? [row[3] ?? null, null, null, row[4] ?? null, row[5] ?? null] : FIELDS.map((_, i) => row[i + 3] ?? null)), day & 8 ? "busy_block" : null];
       }) };
     });
     const payload = { v: 1, p: people };
     validatePayload(payload);
     return payload;
   }
-  function packBinary(payload, variant) {
+  function packBinary(payload, variant, dictionary = false) {
     // Try literal labels, shared strings, and recurring class patterns. Keep row
     // order and exact minutes; the selected time unit must divide every time.
     const rows = payload.p.flatMap(person => person.c);
@@ -141,9 +181,10 @@
       do { const next = value % 128; value = Math.floor(value / 128); byte(next | (value ? 128 : 0)); } while (value);
     };
     const string = value => {
-      const bytes = new TextEncoder().encode(value);
+      const encoded = dictionary ? tokenize(value) : value;
+      const bytes = new TextEncoder().encode(encoded);
       // UTF-8 replaces lone surrogates. Let the JSON candidate preserve them.
-      if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== value) throw new Error("Use JSON for this label.");
+      if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== encoded) throw new Error("Use JSON for this label.");
       integer(bytes.length); for (const value of bytes) byte(value);
     };
     const strings = [], ids = new Map();
@@ -159,7 +200,7 @@
     };
     const patternKey = row => JSON.stringify([time(row[1]), time(row[2]), ...FIELDS.map((_, i) => row[i + 3] || null), row[8] || null]);
     const patterns = [], patternIds = new Map();
-    byte(variant | (STEPS.indexOf(step) << 2));
+    byte(variant | (STEPS.indexOf(step) << 2) | (dictionary ? 32 : 0));
     if (variant) { integer(strings.length); for (const label of strings) string(label); }
     if (variant === 2) {
       for (const row of rows) {
@@ -189,7 +230,7 @@
     }
     return Uint8Array.from(out);
   }
-  function unpackBinary(bytes) {
+  function unpackBinary(bytes, version4 = false) {
     const invalid = () => { throw new Error("This code does not contain valid schedule data."); };
     let offset = 0;
     const byte = () => { if (offset >= bytes.length) invalid(); return bytes[offset++]; };
@@ -206,10 +247,12 @@
       if (offset + length > bytes.length) invalid();
       let value;
       try { value = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(offset, offset + length)); } catch { invalid(); }
-      offset += length; if (value.length > 200) invalid(); return value;
+      offset += length;
+      if (dictionary) { try { value = untokenize(value); } catch { invalid(); } }
+      if (value.length > 200) invalid(); return value;
     };
-    const header = byte(), variant = header & 3, step = STEPS[header >> 2];
-    if (variant > 2 || !step) invalid();
+    const header = byte(), variant = header & 3, dictionary = version4 && Boolean(header & 32), step = STEPS[(version4 ? header & 31 : header) >> 2];
+    if (variant > 2 || !step || (version4 && header & 192)) invalid();
     const strings = [];
     if (variant) { const count = integer(50000); for (let i = 0; i < count; i++) strings.push(string()); }
     const labels = () => {
@@ -267,13 +310,15 @@
     return `WF${version}${mode}${base14(checked)}`;
   }
   async function encode(data) {
-    const payload = pack(data);
-    let bytes = new TextEncoder().encode(JSON.stringify(packCompact(payload)));
+    const payload = pack(data, true);
+    let bytes = new TextEncoder().encode(JSON.stringify(packCompact(payload, true)));
     if (bytes.length > MAX_BYTES) throw new Error("This selection is too large. Export fewer schedules at once.");
     const candidates = [{ bytes, modes: ["J", "D", "Z"] }];
     for (let variant = 0; variant < 3; variant++) {
-      try { candidates.push({ bytes: packBinary(payload, variant), modes: ["B", "R", "S"] }); }
-      catch { /* JSON preserves unusual Unicode and stays available at size limits. */ }
+      for (const dictionary of [false, true]) {
+        try { candidates.push({ bytes: packBinary(payload, variant, dictionary), modes: ["B", "R", "S"] }); }
+        catch { /* JSON preserves unusual Unicode and stays available at size limits. */ }
+      }
     }
     let mode = "J";
     for (const candidate of candidates) {
@@ -287,7 +332,7 @@
         } catch { /* Older browsers can use wrapped DEFLATE or uncompressed data. */ }
       }
     }
-    const code = wrap(bytes, mode, 3);
+    const code = wrap(bytes, mode, 4);
     if (code.length > MAX_CODE) throw new Error("This selection is too large. Export fewer schedules at once.");
     return code;
   }
@@ -320,7 +365,7 @@
       if (legacy[3] === "G") bytes = await decompress(bytes, "gzip");
       payload = json(bytes); validatePayload(payload);
     } else {
-      if (!/^WF(?:2[JDZ]|3[JDZBRS])[0-6][\u4e00-\u8dff]+$/.test(code)) throw new Error("That is not a valid Who’s Free? export code. Paste the full code from your friend.");
+      if (!/^WF(?:2[JDZ]|[34][JDZBRS])[0-6][\u4e00-\u8dff]+$/.test(code)) throw new Error("That is not a valid Who’s Free? export code. Paste the full code from your friend.");
       const checked = unbase14(code.slice(4));
       if (checked.length < 4) throw new Error("The code is incomplete or changed.");
       let bytes = checked.subarray(4);
@@ -328,7 +373,7 @@
       if ("DR".includes(code[3])) bytes = await decompress(bytes, "deflate-raw");
       else if ("ZS".includes(code[3])) bytes = await decompress(bytes, "deflate");
       if (bytes.length > MAX_BYTES) throw new Error("This code is too large. Ask for fewer schedules in one code.");
-      payload = "BRS".includes(code[3]) ? unpackBinary(bytes) : unpackCompact(json(bytes));
+      payload = "BRS".includes(code[3]) ? unpackBinary(bytes, code[2] === "4") : unpackCompact(json(bytes), code[2] === "4");
     }
     const people = Object.create(null);
     for (const person of payload.p) {
@@ -338,13 +383,13 @@
         kind: row[8] || "class",
       })) };
     }
-    return { schema_version: 1, people };
+    return { schema_version: 1, ...(code[2] === "4" ? { share_profile: "compact" } : {}), people };
   }
-  function sameSchedule(a, b) {
+  function sameSchedule(a, b, compact = false) {
     const signature = person => JSON.stringify([
       person.semester ?? null,
       (person.classes || []).map(item => JSON.stringify([
-        item.day, item.start, item.end, ...FIELDS.map(key => item[key] || null),
+        item.day, item.start, item.end, ...FIELDS.map(key => compact && (key === "course_code" || key === "section") ? null : compact && key === "instructor" ? familyName(item[key]) : item[key] || null),
         item.kind === "busy_block" ? "busy_block" : "class"
       ])).sort()
     ]);
@@ -365,7 +410,7 @@
       const normalized = normalizedName(name), existingName = names.get(normalized);
       let target = name;
       if (existingName !== undefined) {
-        if (sameSchedule(people[existingName], person)) { skipped++; continue; }
+        if (sameSchedule(people[existingName], person, incoming.share_profile === "compact")) { skipped++; continue; }
         let number = 2;
         while (names.has(normalizedName(numberedName(existingName, number))) || reserved.has(normalizedName(numberedName(existingName, number)))) number++;
         const newName = numberedName(existingName, number);
@@ -385,6 +430,6 @@
     }
     return { data: { ...(existing || {}), schema_version: existing?.schema_version || 1, people }, added, replaced, skipped, kept, renamed };
   }
-  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, sameSchedule, pack, packBinary, unpackBinary } };
+  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, sameSchedule, pack, packCompact, packBinary, unpackBinary, familyName, tokenize, untokenize, WORDS } };
 })();
 

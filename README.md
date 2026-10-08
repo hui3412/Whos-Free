@@ -90,7 +90,7 @@ October 2–5, 2026, before the visual overhaul
 - Optimized availability calculations, duplicate comparisons and group-calendar processing.
 - Added fork-improvement credit beside the original creator.
 
-Copy complete share codes, including special characters. New WF3 exports automatically choose the shortest of compact JSON, binary time deltas, shared labels and recurring-class patterns, with optional DEFLATE compression. WF1 alphanumeric and WF2 Unicode codes remain importable. Recipients should refresh the app before importing a new WF3 code. Codes remain self-contained, with no server lookup or downloaded dictionary. See [SHARE_CODE_FORMAT.md](SHARE_CODE_FORMAT.md) for the versioned format. Reloading clears Undo history, not saved schedules; finish or cancel an editor or code panel before undoing.
+Copy complete share codes, including special characters. New WF4 exports omit course codes and sections and shorten instructor names to inferred surnames, while retaining full local data and JSON backups. They choose the shortest of compact JSON, binary time deltas, shared labels and recurring-class patterns, with optional DEFLATE compression and a built-in word dictionary. WF1, WF2 and WF3 codes remain importable with all their original details. Recipients should refresh the app before importing a new WF4 code. Codes stay self-contained and work offline. The export screen shows whether the selection fits a 1,000-character message. See [SHARE_CODE_FORMAT.md](SHARE_CODE_FORMAT.md) for the versioned format. Reloading clears Undo history, not saved schedules; finish or cancel an editor or code panel before undoing.
 
 ### Version 12.3 — Cleaner interface and saved personalization
 

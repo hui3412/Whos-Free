@@ -16,6 +16,15 @@ function codec(compression = CompressionStream) {
 const api = codec();
 const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 const minutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+function expectedExport(decoded) {
+  const result = plain(decoded);
+  result.share_profile = "compact";
+  for (const person of Object.values(result.people)) for (const item of person.classes) {
+    item.course_code = null; item.section = null;
+    if (item.instructor) item.instructor = item.instructor.trim().split(/\s+/).at(-1);
+  }
+  return result;
+}
 function compact(data) {
   return Object.entries(data.people).map(([name, person]) => [name, person.classes.map(item => {
     const row = [days.indexOf(item.day) | (item.kind === "busy_block" ? 8 : 0), minutes(item.start), minutes(item.end) - minutes(item.start), ...fields.map(key => item[key] || null)];
@@ -46,15 +55,16 @@ function week(people = 1) {
   }) }])) };
 }
 
-test("frozen original WF1 and WF2 exports remain readable, including every compression mode", async () => {
+test("frozen original WF1, WF2 and WF3 exports retain full details in every compression mode", async () => {
   for (const [name, code] of Object.entries(legacy.codes)) {
     const decoded = await api.decode(code.replace(/(.{25})/g, "$1\n"));
     assert.equal(decoded.people.Élodie.classes[0].course, "Calcul différentiel", name);
     assert.equal(decoded.people.Élodie.classes[1].kind, "busy_block", name);
     assert.equal(decoded.people.Élodie.classes[1].day, "Saturday", name);
-    if (name.startsWith("wf2")) {
+    if (!name.startsWith("wf1")) {
       assert.equal(decoded.people.Élodie.semester, "Fall 2026");
       assert.equal(decoded.people["No semester"].semester, null);
+      assert.deepEqual(plain(decoded), plain(await api.decode(legacy.codes.wf2Raw)));
     }
   }
   assert.deepEqual(plain(await api.decode(legacy.codes.wf1Plain.toLowerCase())), plain(await api.decode(legacy.codes.wf1Plain)));
@@ -84,20 +94,20 @@ test("each binary layout preserves row order, exact minutes, Unicode and semeste
       assert.deepEqual(plain(actual), expected, `variant ${variant}, mode ${mode}`);
     }
   }
-  assert.deepEqual(plain(await api.decode(await api.encode(data))), expected);
+  assert.deepEqual(plain(await api.decode(await api.encode(data))), expectedExport(expected));
   const loneSurrogate = { people: { "Name\uD800": { classes: [{ day: "Monday", start: "08:00", end: "09:00", course: "Label\uDC00" }] } } };
-  assert.deepEqual(plain(await api.decode(await api.encode(loneSurrogate))), plain(await api.decode(oldCode(loneSurrogate))));
+  assert.deepEqual(plain(await api.decode(await api.encode(loneSurrogate))), expectedExport(await api.decode(oldCode(loneSurrogate))));
 });
 
-test("adaptive WF3 exports never exceed WF2 and substantially shorten realistic collections", async () => {
+test("adaptive WF4 exports shorten synthetic collections compared with full WF2 exports", async () => {
   const sizes = [];
   for (const data of [week(), week(10), { people: { Empty: { classes: [] } } }, legacy.data]) {
     for (const compression of [true, false]) {
       const code = await codec(compression ? CompressionStream : false).encode(data);
       sizes.push({ people: Object.keys(data.people).length, entries: Object.values(data.people).reduce((n, p) => n + p.classes.length, 0), compression, old: oldCode(data, compression).length, new: code.length });
-      assert.match(code, /^WF3/);
+      assert.match(code, /^WF4/);
       assert.ok(code.length <= oldCode(data, compression).length);
-      assert.deepEqual(plain(await api.decode(code)), plain(await api.decode(oldCode(data, compression))));
+      assert.deepEqual(plain(await api.decode(code)), expectedExport(await api.decode(oldCode(data, compression))));
     }
   }
   const data = week(10), newer = await api.encode(data), older = oldCode(data);
@@ -125,7 +135,7 @@ test("seeded irregular schedules round-trip through every layout without size re
     for (let variant = 0; variant < 3; variant++) assert.deepEqual(plain(await api.decode(api.__test.wrap(api.__test.packBinary(api.__test.pack(data), variant), "B", 3))), expected);
     const code = await api.encode(data);
     assert.ok(code.length <= oldCode(data).length);
-    assert.deepEqual(plain(await api.decode(code)), expected);
+    assert.deepEqual(plain(await api.decode(code)), expectedExport(expected));
   }
 });
 

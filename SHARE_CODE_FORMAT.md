@@ -1,8 +1,50 @@
 # Share-code compatibility
 
-New exports use WF3. Import supports WF1, WF2 and WF3. Do not remove an older
+New exports use WF4. Import supports WF1, WF2, WF3 and WF4. Do not remove an older
 decoder when introducing a later version. New versions require an updated app
-on the receiving device. No version requires a server lookup or fixed dictionary.
+on the receiving device. All versions remain self-contained and work offline.
+
+## WF4 compact sharing
+
+WF4 intentionally omits course codes and sections, and replaces instructor full
+names with inferred surnames. It retains person names, semester state, exact
+days/times, course titles, rooms and busy-block kinds. Export does not modify the
+local database. JSON backups still contain the full details. Surname inference
+uses the part before a comma, or the final name segment with common surname
+particles. Hyphenated surnames and separately listed instructors are preserved.
+This is a heuristic, not a reliable parser of every naming convention.
+
+WF4 has the same envelope and six mode characters as WF3. Its JSON class rows
+are `[dayAndKind, startMinute, duration, course, room, surname]`, with trailing
+nulls removed. Binary layouts retain the WF3 field mask, with omitted course
+code and section fields absent. Binary header bit 5 enables the WF4 dictionary;
+bits 6 and 7 are rejected. The time-unit index uses bits 2–4.
+
+The dictionary is built into `schedule-share-code.js`. IDs 1–31 represent its
+fixed `WORDS` table, in order. Do not change the table or reassign IDs in WF4.
+Strings first escape original control characters U+0000–U+001F as U+0000 plus
+the original character, then replace exact dictionary phrases at Unicode word
+boundaries with one control-byte token. Longest phrases win; case and spelling
+stay exact. UTF-8 encoding follows substitution. Import reverses tokens and
+escapes, validates expanded string lengths, and rejects malformed escapes.
+The dictionary also applies to names and rooms without changing their text.
+
+The encoder measures slim JSON and all three binary layouts, with and without
+the dictionary, raw and compressed. It picks the smallest candidate. A common
+word is only tokenized when the dictionary candidate actually saves bytes.
+Unknown words and unusual Unicode retain a literal or JSON fallback.
+
+WF4 imports carry an in-memory `share_profile: "compact"` marker. Duplicate
+comparison projects the existing schedule onto the retained WF4 fields. A
+reimport therefore skips without overwriting richer local details. Different
+retained fields still prompt, and WF1/WF2/WF3 keep full-field conflict checks.
+The marker is not written into the merged database.
+
+The export screen reports whether a code fits a 1,000-character message. Longer
+codes remain complete and copyable; users can select fewer schedules for one
+message. The app does not truncate or silently drop people.
+
+## WF3 lossless format (retained for imports)
 
 ## Envelope
 
@@ -21,9 +63,9 @@ CRC32 is for accidental damage detection, not authentication or encryption.
 | R | Binary | Raw DEFLATE |
 | S | Binary | Zlib-wrapped DEFLATE |
 
-The encoder tries all three binary layouts and compact JSON. Each candidate is
-also compressed when the browser supports it. The smallest byte payload wins.
-This guarantees no longer character code than the current WF2 encoder for the
+The original WF3 encoder tried all three binary layouts and compact JSON. Each candidate was
+also compressed when the browser supported it. The smallest byte payload won.
+This guaranteed no longer character code than the WF2 encoder for the
 same accepted selection and browser compression support. Unicode encoding,
 checksum and prefix overhead have the same lengths in WF2 and WF3.
 
@@ -77,6 +119,6 @@ WF1 modes J/G use the original base32 alphabet, an eight-hex-digit CRC32 before
 the body, and full JSON with optional gzip. WF1 is case-insensitive. Its frozen
 compatibility fixtures were generated using the original WF1 and WF2 encoders.
 
-Shared fields remain name, optional semester, weekday, exact start/end times,
+WF1/WF2/WF3 shared fields remain name, optional semester, weekday, exact start/end times,
 course, course code, section, room, instructor and kind. Local nicknames, groups,
 Undo history, source paths and OCR review markers are not shared.

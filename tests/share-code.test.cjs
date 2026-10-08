@@ -20,13 +20,13 @@ function crafted(payload, compressed = false) {
 
 test("a standalone Unicode code preserves Unicode, weekends, busy labels and empty schedules", async () => {
   const code = await api.encode(data);
-  assert.match(code, /^WF3[DJZBRS][0-6][\u4e00-\u8dff]+$/);
+  assert.match(code, /^WF4[DJZBRS][0-6][\u4e00-\u8dff]+$/);
   assert.equal([...code].length, code.length, "one UTF-16 code unit per visible character");
   const decoded = await api.decode(code.normalize("NFC").replace(/(.{40})/g, "$1\n"));
   assert.deepEqual(Object.keys(decoded.people), Object.keys(data.people));
   assert.equal(decoded.people["Élodie Qian"].source_file, "Shared code");
   assert.equal(decoded.people["Élodie Qian"].classes[0].day, "Saturday");
-  for (const key of Object.keys(classItem)) assert.equal(decoded.people["Élodie Qian"].classes[0][key], classItem[key]);
+  for (const key of Object.keys(classItem)) assert.equal(decoded.people["Élodie Qian"].classes[0][key], key === "instructor" ? "Qian" : classItem[key]);
   assert.equal(decoded.people["Empty Day"].classes.length, 0);
   assert.equal(decoded.nicknames, undefined);
   assert.ok(!JSON.stringify(decoded).includes("private-original"));
@@ -36,8 +36,8 @@ test("compression reduces message size; uncompressed fallback can be read by the
   const collection = { people: { Person: { classes: Array.from({ length: 30 }, () => ({ ...classItem })) } } };
   const compressed = await api.encode(collection);
   const uncompressed = await codec(false).encode(collection);
-  assert.match(compressed, /^WF3[DR]/);
-  assert.match(uncompressed, /^WF3[JB]/);
+  assert.match(compressed, /^WF4[DR]/);
+  assert.match(uncompressed, /^WF4[JB]/);
   assert.ok(compressed.length < uncompressed.length);
   assert.deepEqual(plain(await api.decode(compressed)), plain(await api.decode(uncompressed)));
 });
@@ -128,7 +128,7 @@ test("replace and keep old retain the canonical name; failed batches leave input
 test("damaged, unsupported and malformed codes fail without yielding schedules", async () => {
   const code = await api.encode(data);
   await assert.rejects(api.decode(""), /not a valid/);
-  await assert.rejects(api.decode(code.replace(/^WF3/, "WF9")), /not a valid/);
+  await assert.rejects(api.decode(code.replace(/^WF4/, "WF9")), /not a valid/);
   await assert.rejects(api.decode(code.slice(0, -4)), /incomplete|changed/);
   await assert.rejects(api.decode(code.slice(0, 12) + "!" + code.slice(13)), /not a valid/);
   await assert.rejects(api.decode(crafted("not JSON")), /readable/);
@@ -174,7 +174,7 @@ test("raw and wrapped compression have the same portable result", async () => {
   vm.runInContext(source, context);
   const collection = { people: { Person: { classes: Array.from({ length: 30 }, () => ({ ...classItem })) } } };
   const code = await context.WhosFreeShareCode.encode(collection);
-  assert.match(code, /^WF3[ZS]/);
+  assert.match(code, /^WF4[ZS]/);
   assert.deepEqual(plain(await api.decode(code)), plain(await api.decode(await api.encode(collection))));
   const unavailable = vm.createContext({ TextEncoder, TextDecoder, Blob, Uint8Array });
   vm.runInContext(source, unavailable);
@@ -185,8 +185,8 @@ test("arbitrary minute times and unfamiliar course labels survive compact packin
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const classes = days.map((day, i) => ({ day, start: "09:07", end: "10:13", course: `Unfamiliar course ${i}`, course_code: "XYZ", section: "00001", room: "A-101", instructor: "名字", kind: i % 2 ? "busy_block" : "class" }));
   const code = await api.encode({ people: { Student: { classes } } });
-  assert.deepEqual(plain((await api.decode(code)).people.Student.classes), classes);
-  assert.ok(code.length < 180, "a representative week stays short without dropping labels or minutes");
+  assert.deepEqual(plain((await api.decode(code)).people.Student.classes), classes.map(item => ({ ...item, course_code: null, section: null })));
+  assert.ok(code.length < 180, "a representative week stays short without dropping course labels or minutes");
 });
 
 test("compact payload rejects invalid flags, fractions, labels and oversized collections", async () => {
