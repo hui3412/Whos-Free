@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=52">
+  <link rel="stylesheet" href="styles.css?v=53">
 </head>
 <body>
   <div class="app-shell">
@@ -111,13 +111,6 @@
           <p>Your schedule database is stored locally in this browser. Add a picture or PDF, import JSON, or share a copy with a friend.</p>
         </div>
         <button id="closeScheduleModal" class="modal-close" type="button" aria-label="Close">×</button>
-      </div>
-
-      <div id="scheduleStorageStatus" class="storage-status"></div>
-
-      <div class="schedule-undo-row">
-        <button id="undoScheduleChangesButton" class="secondary-button" type="button" disabled aria-describedby="undoChangesStatus">Undo</button>
-        <p id="undoChangesStatus" class="status-line" aria-live="polite">No recent changes. Undo keeps the last 20 schedule or order changes until you reload.</p>
       </div>
 
       <section class="schedule-action-section" aria-labelledby="scheduleGroupsTitle">
@@ -244,6 +237,13 @@
           <button id="removeSchedulesButton" class="danger-button remove-all-button" type="button">Remove all local schedules</button>
 
           <p class="privacy-footnote">Pictures, PDFs and schedule data stay in this browser. Picture recognition runs on your device; its language files download from this website the first time and are cached for offline use. PDF parsing loads PDF.js when needed. This app never uploads your schedule files.</p>
+
+          <div id="scheduleStorageStatus" class="storage-status"></div>
+
+          <div class="schedule-undo-row">
+            <button id="undoScheduleChangesButton" class="secondary-button" type="button" disabled aria-describedby="undoChangesStatus">Undo</button>
+            <p id="undoChangesStatus" class="status-line" aria-live="polite">No recent changes. Undo keeps the last 20 schedule or order changes until you reload.</p>
+          </div>
         </div>
       </details>
     </section>
@@ -392,11 +392,11 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=52" defer></script>
-  <script src="schedule-image-parser.js?v=52" defer></script>
-  <script src="schedule-availability.js?v=52" defer></script>
-  <script src="schedule-share-code.js?v=52" defer></script>
-  <script src="schedule-groups.js?v=52" defer></script>
-  <script src="app.js?v=52" defer></script>
+  <script src="schedule-parser.js?v=53" defer></script>
+  <script src="schedule-image-parser.js?v=53" defer></script>
+  <script src="schedule-availability.js?v=53" defer></script>
+  <script src="schedule-share-code.js?v=53" defer></script>
+  <script src="schedule-groups.js?v=53" defer></script>
+  <script src="app.js?v=53" defer></script>
 </body>
 </html>
