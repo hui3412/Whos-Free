@@ -22,6 +22,14 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
 
+### Version 61 — Restore header and relocate credits
+
+October 8, 2026
+
+- Restored the previous homepage header while retaining the compact settings, theme controls and shorter descriptions.
+- Moved both app credits from the homepage to the bottom of Settings.
+- Testing was omitted at the user's request.
+
 ### Version 60 — Compact homepage and settings
 
 October 8, 2026

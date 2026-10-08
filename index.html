@@ -25,18 +25,17 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=60">
+  <link rel="stylesheet" href="styles.css?v=61">
 </head>
 <body>
   <div class="app-shell">
-    <header class="app-header masthead">
+    <header class="app-header">
       <div class="brand-copy">
-        <p class="masthead-kicker">Your week, together</p>
         <div class="brand-row">
-          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="1" y="1" width="38" height="38" rx="11"/><path d="M12 11v4m16-4v4M10 19h20"/><rect class="brand-mark-slot" x="11" y="23" width="7" height="6" rx="2"/><rect class="brand-mark-slot" x="22" y="23" width="7" height="6" rx="2"/></svg>
+          <span class="brand-dot" aria-hidden="true"></span>
           <h1>Who's Free?</h1>
         </div>
-        <p class="masthead-description">Find a break. Make a plan.</p>
+        <p>Find who's free now, or check any time during the week. Optimized for the Omnivox system.</p>
       </div>
 
       <div class="header-actions">
@@ -97,10 +96,6 @@
       </section>
     </main>
 
-    <footer class="creator-credit" aria-label="App credits">
-      <span class="creator-dot" aria-hidden="true"></span>
-      <span style="text-align: center; line-height: 1.5">Original app by Xander Vatch<br>Fork improvements by Hui En Qian</span>
-    </footer>
   </div>
 
   <input id="scheduleFileInput" class="visually-hidden" type="file" accept=".json,.JSON,application/json">
@@ -322,6 +317,9 @@
         </div>
         </div>
       </details>
+      <footer class="creator-credit settings-credit" aria-label="App credits">
+        <p>Original app by Xander Vatch<br>Fork improvements by Hui En Qian</p>
+      </footer>
     </section>
   </div>
 
@@ -390,11 +388,11 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=60" defer></script>
-  <script src="schedule-image-parser.js?v=60" defer></script>
-  <script src="schedule-availability.js?v=60" defer></script>
-  <script src="schedule-share-code.js?v=60" defer></script>
-  <script src="schedule-groups.js?v=60" defer></script>
-  <script src="app.js?v=60" defer></script>
+  <script src="schedule-parser.js?v=61" defer></script>
+  <script src="schedule-image-parser.js?v=61" defer></script>
+  <script src="schedule-availability.js?v=61" defer></script>
+  <script src="schedule-share-code.js?v=61" defer></script>
+  <script src="schedule-groups.js?v=61" defer></script>
+  <script src="app.js?v=61" defer></script>
 </body>
 </html>
