@@ -603,6 +603,7 @@
 
   function renderNotificationPeople() {
     const names = Object.keys(peopleMap()).sort(comparePeopleNames);
+    const openNicknames = new Set(Array.from(els.notificationPeopleList.querySelectorAll(".nickname-disclosure[open]"), editor => editor.dataset.person));
     els.notificationPeopleCount.textContent = String(names.length);
     els.notificationPeopleList.replaceChildren();
 
@@ -668,7 +669,7 @@
       const nicknameRow = document.createElement("label");
       nicknameRow.className = "nickname-row";
       const nicknameLabel = document.createElement("span");
-      nicknameLabel.className = "nickname-label";
+      nicknameLabel.className = "nickname-label visually-hidden";
       nicknameLabel.textContent = "Nickname";
       const input = document.createElement("input");
       input.type = "text";
@@ -696,7 +697,14 @@
       });
 
       nicknameRow.append(nicknameLabel, input);
-      row.append(top, nicknameRow);
+      const nicknameEditor = document.createElement("details");
+      nicknameEditor.className = "nickname-disclosure";
+      nicknameEditor.dataset.person = name;
+      nicknameEditor.open = openNicknames.has(name);
+      const nicknameSummary = document.createElement("summary");
+      nicknameSummary.textContent = nickname ? "Edit nickname" : "Add nickname";
+      nicknameEditor.append(nicknameSummary, nicknameRow);
+      row.append(top, nicknameEditor);
       els.notificationPeopleList.append(row);
     }
 
@@ -3049,7 +3057,7 @@
       <div class="empty-detail">
         <div class="empty-symbol" aria-hidden="true">◎</div>
         <h2>Select someone</h2>
-        <p>See their day at a glance, including their class timeline.</p>
+        <p>Choose a person to see their day.</p>
       </div>`;
   }
 
@@ -3625,7 +3633,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=59", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=60", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.

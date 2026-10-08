@@ -25,17 +25,18 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=59">
+  <link rel="stylesheet" href="styles.css?v=60">
 </head>
 <body>
   <div class="app-shell">
-    <header class="app-header">
+    <header class="app-header masthead">
       <div class="brand-copy">
+        <p class="masthead-kicker">Your week, together</p>
         <div class="brand-row">
-          <span class="brand-dot" aria-hidden="true"></span>
+          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><rect x="1" y="1" width="38" height="38" rx="11"/><path d="M12 11v4m16-4v4M10 19h20"/><rect class="brand-mark-slot" x="11" y="23" width="7" height="6" rx="2"/><rect class="brand-mark-slot" x="22" y="23" width="7" height="6" rx="2"/></svg>
           <h1>Who's Free?</h1>
         </div>
-        <p>Find who's free now, or check any time during the week. Optimized for the Omnivox system.</p>
+        <p class="masthead-description">Find a break. Make a plan.</p>
       </div>
 
       <div class="header-actions">
@@ -91,7 +92,7 @@
         <div class="empty-detail">
           <div class="empty-symbol" aria-hidden="true">◎</div>
           <h2>Select someone</h2>
-          <p>See their day at a glance, including their class timeline.</p>
+          <p>Choose a person to see their day.</p>
         </div>
       </section>
     </main>
@@ -111,7 +112,7 @@
       <div class="modal-header">
         <div>
           <h2 id="scheduleModalTitle">Schedule data</h2>
-          <p>Your schedule database is stored locally in this browser. Add a picture or PDF, import JSON, or share a copy with a friend.</p>
+          <p>Add or share schedules. Everything stays on this device.</p>
         </div>
         <button id="closeScheduleModal" class="modal-close" type="button" aria-label="Close">×</button>
       </div>
@@ -119,7 +120,7 @@
       <section class="schedule-action-section" aria-labelledby="addPictureTitle">
         <div class="section-kicker">From a picture</div>
         <h3 id="addPictureTitle">Read a schedule screenshot</h3>
-        <p>Upload a clear Omnivox screenshot, cropped or uncropped. Check the detected schedule before saving. Your picture stays on this device.</p>
+        <p>Upload a clear Omnivox screenshot. No cropping needed. Review before saving.</p>
         <button id="addScheduleImageButton" class="primary-button wide-action" type="button">Add schedule picture</button>
         <button id="manualScheduleButton" class="secondary-button wide-action" type="button">Enter schedule manually</button>
         <div id="imageParserStatus" class="parser-status" role="status" aria-live="polite"></div>
@@ -128,7 +129,7 @@
       <section id="imageReview" class="schedule-action-section image-review" aria-labelledby="imageReviewTitle" hidden>
         <div class="section-kicker">Review</div>
         <h3 id="imageReviewTitle" tabindex="-1">Check the weekly schedule</h3>
-        <p>Check the schedule, then save. Tap a block to make a correction, or choose Add a class if something is missing. Green gaps show breaks longer than 10 minutes.</p>
+        <p>Review, then save. Tap a class to edit it. Green gaps are breaks over 10 minutes.</p>
         <details><summary>Show the original picture</summary><img id="imageReviewPreview" alt="Original schedule for comparison"></details>
         <label class="field-group review-name"><span>Person's name</span><input id="imageReviewName" type="text" maxlength="120" autocomplete="off" required></label>
         <div class="review-semester-fields">
@@ -136,7 +137,7 @@
           <label class="field-group"><span>Year</span><input id="imageReviewYear" type="number" min="2000" max="2099" step="1" inputmode="numeric" aria-describedby="semesterHelp"></label>
           <button id="useCurrentSemesterButton" class="secondary-button" type="button" hidden>Use current semester</button>
         </div>
-        <p id="semesterHelp" class="semester-help">Semester is suggested automatically. Change it or choose Not set before saving.</p>
+        <p id="semesterHelp" class="semester-help">Check the suggested semester before saving.</p>
         <div class="review-grid-scroll" tabindex="0" aria-label="Weekly schedule. Scroll horizontally for more days."><div id="reviewGrid" class="review-grid"></div></div>
         <button id="addReviewClassButton" class="secondary-button" type="button" aria-controls="imageReviewClasses" aria-expanded="false">Add a class</button>
         <div id="imageReviewClasses" class="review-classes" hidden></div>
@@ -159,7 +160,7 @@
       <section class="schedule-action-section" aria-labelledby="shareCodeTitle">
         <div class="section-kicker">Send schedules</div>
         <h3 id="shareCodeTitle">Share with a code</h3>
-        <p>Export selected schedules as a code you can send in a message. Your friend can import it here. All schedule data is inside the code; nothing is stored in the cloud.</p>
+        <p>Send a code to a friend, or paste theirs here. No cloud storage.</p>
         <div class="modal-actions database-actions">
           <button id="exportSchedulesButton" class="secondary-button" type="button">Export</button>
           <button id="importCodeButton" class="secondary-button" type="button">Import</button>
@@ -170,7 +171,7 @@
           <div id="exportPeopleList" class="export-people-list"></div>
           <button id="generateCodeButton" class="primary-button" type="button">Generate code</button>
           <label class="field-group share-code-field"><span>Export code</span><textarea id="exportCodeOutput" rows="5" readonly spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="exportCodeStatus"></textarea></label>
-          <p class="share-code-note">Compact exports omit course codes and sections, and shorten instructor names to surnames. Your saved schedules keep all details. Copy the full code and have your friend refresh <a href="https://hui3412.github.io/Whos-Free/">this app</a> to import it. Older codes still work.</p>
+          <p class="share-code-note">Codes omit course codes and sections, and use instructor surnames. Saved schedules keep all details. Copy the full code; refresh <a href="https://hui3412.github.io/Whos-Free/">the app</a> before importing. Older codes still work.</p>
           <div id="exportCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
           <div class="modal-actions">
             <button id="copyCodeButton" class="secondary-button" type="button" disabled>Copy code</button>
@@ -179,7 +180,7 @@
         </div>
         <div id="codeImportPanel" class="share-code-panel" hidden>
           <h4>Import a friend’s schedules</h4>
-          <p>Paste the full code, including its special characters. New names import automatically. Identical names and timetables are skipped. For the same name with a different timetable, choose Keep both, Replace or Keep old one.</p>
+          <p>Paste the full code, including special characters. Duplicates are skipped; you’ll choose how to handle conflicting schedules.</p>
           <label class="field-group share-code-field"><span>Code from your friend</span><textarea id="importCodeInput" rows="5" maxlength="1800000" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></label>
           <div id="importCodeStatus" class="parser-status" role="status" aria-live="polite"></div>
           <div id="codeConflictPrompt" class="share-code-panel" role="group" aria-labelledby="codeConflictMessage" hidden>
@@ -215,7 +216,7 @@
           <section class="schedule-action-section" aria-labelledby="addScheduleTitle">
             <div class="section-kicker">Add people</div>
             <h3 id="addScheduleTitle">Import an Omnivox schedule PDF</h3>
-            <p>Select one or more Omnivox schedule PDFs. The person's name and classes are read on this device and added automatically.</p>
+            <p>Select Omnivox PDFs to add their names and classes automatically.</p>
             <button id="addSchedulePdfButton" class="primary-button wide-action" type="button">Add schedule PDF</button>
             <div id="parserStatus" class="parser-status" aria-live="polite"></div>
           </section>
@@ -223,7 +224,7 @@
           <section class="schedule-action-section" aria-labelledby="databaseTitle">
             <div class="section-kicker">Database</div>
             <h3 id="databaseTitle">Import or share schedules.json</h3>
-            <p>Import a friend's database, or share your complete local database through the system share sheet.</p>
+            <p>Import a collection or share a complete backup.</p>
             <div class="modal-actions database-actions">
               <button id="importSchedulesButton" class="secondary-button" type="button">Import schedules.json</button>
               <button id="shareSchedulesButton" class="secondary-button" type="button">Share schedules.json</button>
@@ -232,7 +233,7 @@
 
           <button id="removeSchedulesButton" class="danger-button remove-all-button" type="button">Remove all local schedules</button>
 
-          <p class="privacy-footnote">Pictures, PDFs and schedule data stay in this browser. Picture recognition runs on your device; its language files download from this website the first time and are cached for offline use. PDF parsing loads PDF.js when needed. This app never uploads your schedule files.</p>
+          <p class="privacy-footnote">Files and recognition stay on your device. OCR language files download once and are cached for offline use. Schedule files are never uploaded.</p>
 
           <div id="scheduleStorageStatus" class="storage-status"></div>
 
@@ -250,17 +251,16 @@
       <div class="modal-header">
         <div>
           <h2 id="settingsModalTitle">Settings</h2>
-          <p>Personalize Who's Free? on this device. Notification preferences stay local.</p>
+          <p>Your preferences stay on this device.</p>
         </div>
         <button id="closeSettingsModal" class="modal-close" type="button" aria-label="Close settings">×</button>
       </div>
 
-      <section class="settings-section notification-settings-section" aria-labelledby="notificationsTitle">
+      <details class="settings-section settings-disclosure notification-settings-section">
+        <summary><h3 id="notificationsTitle">Break alerts</h3></summary>
+        <div class="settings-disclosure-body">
         <div class="settings-section-heading">
-          <div>
-            <div class="section-kicker">Notifications</div>
-            <h3 id="notificationsTitle">Long break alerts</h3>
-          </div>
+          <span>Enable notifications</span>
           <label class="switch-control" for="breakNotificationToggle">
             <input id="breakNotificationToggle" type="checkbox">
             <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
@@ -268,65 +268,67 @@
           </label>
         </div>
 
-        <p class="settings-description">Get one grouped notification when one or more unmuted friends start a break longer than 10 minutes between classes.</p>
+        <p class="settings-description">Get notified when friends start breaks over 10 minutes between classes.</p>
 
         <div id="notificationPermissionStatus" class="notification-status" aria-live="polite"></div>
 
         <div class="settings-inline-actions">
-          <button id="testNotificationButton" class="secondary-button" type="button">Send test notification</button>
+          <button id="testNotificationButton" class="secondary-button" type="button">Test notification</button>
         </div>
 
-        <p class="settings-note">Notifications work while Who's Free? is open or running. On iPhone, add the site to your Home Screen for the best notification support.</p>
-      </section>
+        <p class="settings-note">Keep the app running for alerts. On iPhone, add it to your Home Screen.</p>
+        </div>
+      </details>
 
-      <section class="settings-section" aria-labelledby="notificationPeopleTitle">
-        <div class="settings-section-heading people-notification-heading">
+      <details class="settings-section settings-disclosure">
+        <summary class="people-notification-heading">
           <div>
-            <div class="section-kicker">People</div>
             <h3 id="notificationPeopleTitle">Names, pins & bells</h3>
+            <span class="settings-summary-note">Friends list</span>
           </div>
           <span id="notificationPeopleCount" class="count-badge">0</span>
-        </div>
-        <p class="settings-description">Give friends a nickname, pin favorites to the top, or mute only their break notifications. These choices stay on this device.</p>
+        </summary>
+        <div class="settings-disclosure-body">
+        <p class="settings-description">Pin favorites, mute alerts or set nicknames.</p>
         <div id="notificationPeopleList" class="notification-people-list people-preferences-list"></div>
-      </section>
+        </div>
+      </details>
 
-      <section class="settings-section appearance-settings-section" aria-labelledby="appearanceTitle">
-        <div class="section-kicker">Themes</div>
-        <h3 id="appearanceTitle">Look & feel</h3>
-        <p class="settings-description">Choose light or dark mode, then choose a full color theme. Each theme changes the page background, panels, cards, controls and accents.</p>
-
+      <details class="settings-section settings-disclosure appearance-settings-section" open>
+        <summary><h3 id="appearanceTitle">Appearance</h3></summary>
+        <div class="settings-disclosure-body">
         <div class="theme-mode-group" aria-label="Light or dark mode">
           <button id="lightThemeButton" class="theme-mode-button" type="button" aria-label="Use light mode" aria-pressed="false"><span aria-hidden="true">☀</span> Light</button>
           <button id="darkThemeButton" class="theme-mode-button" type="button" aria-label="Use dark mode" aria-pressed="true"><span aria-hidden="true">☾</span> Dark</button>
         </div>
 
-        <div class="theme-template-label">Color theme</div>
-        <div id="colorThemeGrid" class="color-theme-grid" role="group" aria-label="Full color theme">
+        <div class="theme-template-label">Color</div>
+        <div id="colorThemeGrid" class="color-theme-grid" role="group" aria-label="Color theme">
           <button class="color-theme-card" type="button" data-color-theme="blue" aria-pressed="true">
-            <span class="theme-swatch blue" aria-hidden="true"></span><span><strong>Ocean</strong><small>Cool blue</small></span>
+            <span class="theme-swatch blue" aria-hidden="true"></span><strong>Neutral</strong>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="violet" aria-pressed="false">
-            <span class="theme-swatch violet" aria-hidden="true"></span><span><strong>Lavender</strong><small>Soft purple</small></span>
+            <span class="theme-swatch violet" aria-hidden="true"></span><strong>Violet</strong>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="rose" aria-pressed="false">
-            <span class="theme-swatch rose" aria-hidden="true"></span><span><strong>Rose</strong><small>Warm pink</small></span>
+            <span class="theme-swatch rose" aria-hidden="true"></span><strong>Rose</strong>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="mint" aria-pressed="false">
-            <span class="theme-swatch mint" aria-hidden="true"></span><span><strong>Forest</strong><small>Fresh green</small></span>
+            <span class="theme-swatch mint" aria-hidden="true"></span><strong>Mint</strong>
           </button>
           <button class="color-theme-card" type="button" data-color-theme="orange" aria-pressed="false">
-            <span class="theme-swatch orange" aria-hidden="true"></span><span><strong>Sunset</strong><small>Warm orange</small></span>
+            <span class="theme-swatch orange" aria-hidden="true"></span><strong>Amber</strong>
           </button>
         </div>
-      </section>
+        </div>
+      </details>
     </section>
   </div>
 
   <div id="groupsModal" class="modal-backdrop" hidden>
     <section class="schedule-modal groups-modal panel" role="dialog" aria-modal="true" aria-labelledby="groupsModalTitle">
       <div class="modal-header">
-        <div><h2 id="groupsModalTitle">Manage groups</h2><p>A person can belong to several groups. Groups and visibility stay on this device. Switch off Show groups to return to the usual list.</p></div>
+        <div><h2 id="groupsModalTitle">Manage groups</h2><p>People can belong to multiple groups.</p></div>
         <button id="closeGroupsModal" class="modal-close" type="button" aria-label="Close groups">×</button>
       </div>
       <button id="newGroupButton" class="primary-button" type="button">New group</button>
@@ -334,7 +336,7 @@
       <form id="groupForm" class="group-form" hidden>
         <h3 id="groupFormTitle">New group</h3>
         <label class="group-name-field"><span>Group name</span><input id="groupNameInput" type="text" maxlength="60" autocomplete="off" required></label>
-        <p>Select people. Selecting someone here doesn’t remove them from another group.</p>
+        <p>Choose members.</p>
         <div id="groupMembersList" class="group-members-list"></div>
         <p id="groupFormError" class="parser-status" data-tone="error" role="alert"></p>
         <div class="modal-actions">
@@ -351,7 +353,7 @@
         <div><div class="section-kicker">Group availability</div><h2 id="groupWeekTitle">Weekly availability</h2><p id="groupWeekSummary"></p></div>
         <button id="closeGroupWeekModal" class="modal-close" type="button" aria-label="Close group availability">×</button>
       </div>
-      <p class="group-week-note">Darker blocks mean more people are free. Transitions of 10 minutes or less blend into the neighboring block with more people free. Select a block to see exact times and people.</p>
+      <p class="group-week-note">Darker blocks mean more people are free. Select a block for exact times and people.</p>
       <div id="groupWeekLegend" class="group-week-legend" aria-label="Availability color key"></div>
       <div class="review-grid-scroll" tabindex="0" aria-label="Group weekly availability. Scroll horizontally for more days."><div id="groupWeekGrid" class="review-grid group-week-grid"></div></div>
       <section id="groupSlotDetails" class="group-slot-details" aria-live="polite"><p>Select a time block to see the people available.</p></section>
@@ -388,11 +390,11 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=59" defer></script>
-  <script src="schedule-image-parser.js?v=59" defer></script>
-  <script src="schedule-availability.js?v=59" defer></script>
-  <script src="schedule-share-code.js?v=59" defer></script>
-  <script src="schedule-groups.js?v=59" defer></script>
-  <script src="app.js?v=59" defer></script>
+  <script src="schedule-parser.js?v=60" defer></script>
+  <script src="schedule-image-parser.js?v=60" defer></script>
+  <script src="schedule-availability.js?v=60" defer></script>
+  <script src="schedule-share-code.js?v=60" defer></script>
+  <script src="schedule-groups.js?v=60" defer></script>
+  <script src="app.js?v=60" defer></script>
 </body>
 </html>
