@@ -39,6 +39,16 @@ These three milestones group the completed work chronologically; their labels ar
 
 Public sources: [LaSalle English guide](https://dam.lcieducation.com/1fizm6CngLhkF2on733ugFS68_sODU5MDI0NDlhMGRjNDFm/Guide_utilisation_Omnivox_EN.pdf), [LaSalle French guide](https://cdn.lcieducation.com/-/media/files/montreal/students-resources/guide_utilisation_omnivox_fr.pdf), [LCI Melbourne guide](https://cdn.lcieducation.com/-/media/files/melbourne/omnivox-guide/omnivox-lci-melbourne-guide.pdf%3Fla=en&rev=fa082abc9ea74c6b8ef929d7e8a486b9), [Sainte-Foy printable example](https://www.fichier-pdf.fr/2012/01/16/omnivox-cegep-de-sainte-foy/), and [Trois-Rivières timetable examples](https://www.cegeptr.qc.ca/horaire/).
 
+### Reader 52 — Small cropped pictures and coloured separators
+
+October 8, 2026
+
+- Reproduced missing afternoon classes and merged adjacent classes in a newly supplied small, cropped timetable, including in the deployed browser.
+- Accept time-gutter OCR that loses a colon (`1130`, `1600`) or reads it as a dash (`09-00`), while retaining clock validation and independent geometric checks.
+- Fit repeated half-hour axes to shared boundary labels, not padded single-label centers, so small errors do not accumulate down a tall timetable.
+- Detect lighter, white and chromatic separators between coloured classes using consistent contrast in one RGB channel across the column. Require matching contrast directions, edge evidence and uniform colour channels to avoid splitting classes at text or JPEG halos.
+- Added a coordinate-only fixture from the failing time gutter and raster regressions; no supplied pictures or course/person text are published. OCR remains entirely on-device, and imports still require review before saving.
+
 ### Reader 51 — Validated on-device fallbacks and complete-axis checks
 
 October 8, 2026

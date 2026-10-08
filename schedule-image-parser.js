@@ -136,7 +136,10 @@
   }
 
   function normalizedTime(text) {
-    const value = String(text).replace(/[Oo]/g, "0").replace(/[Il|]/g, "1").replace(/[;.]/g, ":").replace(/\s+/g, "");
+    let value = String(text).replace(/[Oo]/g, "0").replace(/[Il|]/g, "1").replace(/[;.\-]/g, ":").replace(/\s+/g, "");
+    // Tiny clock colons are often dropped entirely. Interpret HHMM only in
+    // the already isolated time gutter, then require the usual axis checks.
+    if (/^\d{3,4}$/.test(value)) value = `${value.slice(0, -2)}:${value.slice(-2)}`;
     const match = value.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
     return match ? `${match[1].padStart(2, "0")}:${match[2]}` : null;
   }
@@ -163,7 +166,9 @@
     const centers = [...groups].map(([minute, labels]) => ({ minute, cy: labels.reduce((sum, label) => sum + label.cy, 0) / labels.length, labels })).sort((a, b) => a.minute - b.minute);
     const paired = centers.filter(point => point.labels.length >= 2);
     if (paired.length < 3) throw new Error("Could not identify shared timetable boundaries. Use the full timetable view, not the numbered schedule-configuration grid.");
-    const { slope, intercept } = fitTimeAxis(paired.length >= 8 ? paired : centers);
+    // Single start/end labels sit either side of a boundary. Including those
+    // padded positions in the fit biases the slope when OCR misses colons.
+    const { slope, intercept } = fitTimeAxis(paired);
     const valid = centers.filter(point => Math.abs(point.cy - (intercept + point.minute * slope)) < slope * 9);
     if (!Number.isFinite(slope) || valid.length < 8 || valid.length < centers.length * .65) throw new Error("The time labels are unclear. Try an upright screenshot with the full time column.");
     const observedFirst = Math.min(...valid.map(point => point.minute));
@@ -338,39 +343,65 @@
     const samples = Math.ceil(width / 2);
     const edgeSamples = Math.max(2, Math.ceil(samples * .04));
     for (let y = Math.max(offsetY, Math.floor(minimumY * scale)); y < Math.min(canvas.height - offsetY, Math.ceil(maximumY * scale) + offsetY); y += 1) {
-      let matches = 0;
-      let leftMatches = 0, rightMatches = 0;
+      const matches = Array(19).fill(0), leftMatches = Array(19).fill(0), rightMatches = Array(19).fill(0);
       const shades = [];
       const aboveShades = [], belowShades = [];
+      const channels = [[], [], []], aboveChannels = [[], [], []], belowChannels = [[], [], []];
       for (let x = 0; x < width; x += 2) {
         const offset = (y * width + x) * 4;
         const red = data[offset], green = data[offset + 1], blue = data[offset + 2];
         const gray = (red + green + blue) / 3;
         shades.push(gray);
-        if (gray < 90 || gray > 248) continue;
+        if (gray < 90) continue;
         const above = ((y - offsetY) * width + x) * 4;
         const below = ((y + offsetY) * width + x) * 4;
         const aboveGray = (data[above] + data[above + 1] + data[above + 2]) / 3;
         const belowGray = (data[below] + data[below + 1] + data[below + 2]) / 3;
+        if (gray > 248 && (aboveGray > 248 || belowGray > 248)) continue;
         aboveShades.push(aboveGray); belowShades.push(belowGray);
-        const neighbor = Math.max(aboveGray, belowGray);
-        const transition = Math.max(Math.abs(data[above] - data[below]), Math.abs(data[above + 1] - data[below + 1]), Math.abs(data[above + 2] - data[below + 2]));
-        if (neighbor - gray > 3 || transition > 18) {
-          matches += 1;
-          if (x / 2 < edgeSamples) leftMatches += 1;
-          if (x / 2 >= samples - edgeSamples) rightMatches += 1;
+        for (let channel = 0; channel < 3; channel += 1) {
+          channels[channel].push(data[offset + channel]);
+          aboveChannels[channel].push(data[above + channel]);
+          belowChannels[channel].push(data[below + channel]);
+        }
+        // Some Omnivox themes use a lighter (even white) separator between
+        // adjacent purple classes. A real rule or fill transition has a
+        // consistent contrast direction across its width in one RGB channel.
+        for (let channel = 0; channel < 3; channel += 1) {
+          const toAbove = data[offset + channel] - data[above + channel];
+          const toBelow = data[offset + channel] - data[below + channel];
+          const transition = data[above + channel] - data[below + channel];
+          const patterns = [toAbove >= 3 && toBelow >= 3, toAbove <= -3 && toBelow <= -3,
+            toAbove >= 3 && toBelow <= -3, toAbove <= -3 && toBelow >= 3,
+            transition > 18, transition < -18];
+          for (let pattern = 0; pattern < 6; pattern += 1) {
+            if (!patterns[pattern]) continue;
+            const index = channel * 6 + pattern;
+            matches[index] += 1;
+            if (x / 2 < edgeSamples) leftMatches[index] += 1;
+            if (x / 2 >= samples - edgeSamples) rightMatches[index] += 1;
+          }
+        }
+        // A dark rule can blend into one neighbouring fill. Preserve this
+        // asymmetric evidence, subject to the same colour-uniformity checks.
+        if (gray <= 248 && Math.max(aboveGray, belowGray) - gray > 3) {
+          matches[18] += 1;
+          if (x / 2 < edgeSamples) leftMatches[18] += 1;
+          if (x / 2 >= samples - edgeSamples) rightMatches[18] += 1;
         }
       }
       // A full grid line also reaches the padding at a column edge. Compression
       // ringing around a wide title can cover most of its coloured cell,
       // but leaves the padding beside that title without a border.
-      if (matches / samples >= .72 && Math.max(leftMatches, rightMatches) / edgeSamples >= .6) {
+      if (matches.some((count, index) => count / samples >= .72 && Math.max(leftMatches[index], rightMatches[index]) / edgeSamples >= .6)) {
         shades.sort((a, b) => a - b);
         aboveShades.sort((a, b) => a - b); belowShades.sort((a, b) => a - b);
         // A border has nearly uniform brightness. Dense text and JPEG ringing
         // can cover most of a row too, but have a much wider brightness range.
         const uniform = values => values[Math.floor(values.length * .9)] - values[Math.floor(values.length * .1)] < 24;
-        if (uniform(shades) && uniform(aboveShades) && uniform(belowShades)) hits.push(y / scale);
+        const uniformChannels = rows => rows.every(values => { values.sort((a, b) => a - b); return uniform(values); });
+        if (uniform(shades) && uniform(aboveShades) && uniform(belowShades) &&
+            uniformChannels(channels) && uniformChannels(aboveChannels) && uniformChannels(belowChannels)) hits.push(y / scale);
       }
     }
     const groups = [];
@@ -617,7 +648,7 @@
             try { grid = readTimeGrid(words.filter(item => item.x1 <= columns[0].left + 3), headerBottom, evidence); break; }
             catch { /* Continue to the next independent reading method. */ }
           }
-          if (!grid) throw new Error("Could not validate the full time column after several on-device reading methods. Include all the times and grid borders in a clear, upright screenshot. (Reader 51: time column)");
+          if (!grid) throw new Error("Could not validate the full time column after several on-device reading methods. Include all the times and grid borders in a clear, upright screenshot. (Reader 52: time column)");
         }
       }
       status("Isolating the timetable from the rest of the picture…");
@@ -689,7 +720,7 @@
       const name = globalThis.WhosFreeParser.extractScheduleName(fullItems) || "";
       return { name, person: { source_file: filename, classes }, needsReview: true };
     } catch (error) {
-      throw new Error(`${error.message || "The picture could not be read."}${String(error.message).includes("Reader 51:") ? "" : ` (Reader 51: ${stage.toLowerCase()})`}`);
+      throw new Error(`${error.message || "The picture could not be read."}${String(error.message).includes("Reader 52:") ? "" : ` (Reader 52: ${stage.toLowerCase()})`}`);
     } finally {
       bootFailed = true;
       clearTimeout(bootTimer);

@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const fixtures = require("./fixtures/half-hour-image-axes.json");
+const colonlessAxis = require("./fixtures/cropped-colonless-axis.json");
 
 function load(document) {
   const context = vm.createContext({ document, URL, setTimeout, clearTimeout });
@@ -70,6 +71,23 @@ test("an inconsistent or short half-hour axis is rejected rather than guessed", 
   assert.throws(() => helpers.timeGrid(markers().slice(0, 7), 94), /enough time labels/);
   const inconsistent = markers().map(item => ({ ...item, cy: item.cy + (item.text.endsWith(":00") ? 25 : -25) }));
   assert.throws(() => helpers.timeGrid(inconsistent, 94), /time labels are unclear/);
+});
+
+test("real cropped OCR clocks retain the full axis when tiny colons become spaces, dashes or nothing", () => {
+  const grid = helpers.timeGrid(colonlessAxis.map(values => word(...values)), 24.17142857142857);
+  assert.equal(grid.items[0].text, "08:00");
+  assert.equal(grid.items.at(-1).text, "17:30");
+  assert.ok(Math.abs(grid.rowHeight - 35.9) < .1);
+  assert.ok(Math.abs(grid.top - 24) < 1);
+  assert.ok(Math.abs(grid.bottom - 706) < 1);
+});
+
+test("a few shared boundaries fit the axis without bias from padded single labels", () => {
+  const sparse = markers().filter((item, index) => ["08:30", "09:00", "16:30"].includes(item.text) || index % 2 === 1);
+  const grid = helpers.timeGrid(sparse, 94);
+  assert.equal(grid.rowHeight, 30);
+  assert.equal(grid.top, 100);
+  assert.equal(grid.bottom, 700);
 });
 
 function pixelCanvas(width, height, pixel) {
@@ -265,6 +283,63 @@ test("genuine tinted grid lines that reach the column edges remain detectable", 
   const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 160, rowHeight: 30 });
   assert.equal(regions.length, 2);
 });
+
+test("colour ringing with opposite contrast directions across a purple class does not split it", () => {
+  const column = { day: "Monday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 250, (x, y) => {
+    if ([40, 160, 190, 220].includes(y)) return [215, 215, 215];
+    if (y === 100) return x % 10 < 5 ? [204, 202, 255] : [192, 194, 255];
+    return y > 40 && y < 160 ? [198, 198, 255] : [238, 238, 238];
+  });
+  const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 220, rowHeight: 30 });
+  assert.equal(regions.length, 3);
+  assert.ok(Math.abs(regions[0].y1 - 160) < 2);
+});
+
+test("a faint gradient at a fill change separates neighbouring purple classes", () => {
+  const column = { day: "Tuesday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 220, (_x, y) => {
+    if ([40, 160].includes(y)) return [215, 215, 215];
+    if (y === 100) return [197, 197, 253];
+    return y < 100 ? [201, 201, 255] : [194, 194, 252];
+  });
+  const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 160, rowHeight: 30 });
+  assert.equal(regions.length, 2);
+  assert.ok(Math.abs(regions[0].y1 - 100) < 2);
+});
+
+test("a thick dark rule remains visible when a sample falls just outside it", () => {
+  const column = { day: "Tuesday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 220, (_x, y) => {
+    if ([40, 160].includes(y)) return [215, 215, 215];
+    if (y >= 96 && y <= 99) return [70, 70, 70];
+    return [235, 235, 235];
+  });
+  const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 160, rowHeight: 30 });
+  assert.equal(regions.length, 2);
+  assert.ok(Math.abs(regions[0].y1 - 100) < 3);
+});
+
+test("blue text variation cannot pass a brightness-only uniformity check", () => {
+  const column = { day: "Monday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 220, (x, y) => {
+    if ([40, 100, 160].includes(y)) return [225, 225, 225];
+    if (y === 70) return [245, 245, 245];
+    if ([68, 72].includes(y)) return x % 10 < 8 ? [245, 245, 190] : [245, 245, 245];
+    return [255, 255, 255];
+  });
+  const borders = helpers.borderRows(canvas, column, 20, 180);
+  assert.ok(!borders.some(y => Math.abs(y - 70) < 3));
+});
+
+for (const line of [[204, 204, 255], [198, 198, 245], [255, 255, 255]]) {
+  test(`lighter/chromatic separator ${line.join("/")} splits adjacent purple classes`, () => {
+    const canvas = pixelCanvas(705, 220, (_x, y) => [40, 100, 160].includes(y) ? line : [198, 198, 255]);
+    const regions = helpers.classRegions(canvas, [{ day: "Friday", left: 100, right: 200, width: 100 }], { top: 40, bottom: 160, rowHeight: 30 });
+    assert.equal(regions.length, 2);
+    assert.ok(Math.abs(regions[0].y1 - 100) < 2);
+  });
+}
 
 test("a slightly miscentered column needs a border at only one padded edge", () => {
   const column = { day: "Monday", left: 100, right: 200, width: 100 };
