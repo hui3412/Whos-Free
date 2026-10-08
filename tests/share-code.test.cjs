@@ -20,7 +20,7 @@ function crafted(payload, compressed = false) {
 
 test("a standalone Unicode code preserves Unicode, weekends, busy labels and empty schedules", async () => {
   const code = await api.encode(data);
-  assert.match(code, /^WF4[DJZBRS][0-6][\u4e00-\u8dff]+$/);
+  assert.match(code, /^WF5[DJZBRSTUV][0-9a-e][\u3400-\u4dbf\u4e00-\u9fff\uac00-\uc03f]+$/);
   assert.equal([...code].length, code.length, "one UTF-16 code unit per visible character");
   const decoded = await api.decode(code.normalize("NFC").replace(/(.{40})/g, "$1\n"));
   assert.deepEqual(Object.keys(decoded.people), Object.keys(data.people));
@@ -36,9 +36,9 @@ test("compression reduces message size; uncompressed fallback can be read by the
   const collection = { people: { Person: { classes: Array.from({ length: 30 }, () => ({ ...classItem })) } } };
   const compressed = await api.encode(collection);
   const uncompressed = await codec(false).encode(collection);
-  assert.match(compressed, /^WF4[DR]/);
-  assert.match(uncompressed, /^WF4[JB]/);
-  assert.ok(compressed.length < uncompressed.length);
+  assert.match(compressed, /^WF5[DJZBRSTUV]/);
+  assert.match(uncompressed, /^WF5[JBT]/);
+  assert.ok(compressed.length <= uncompressed.length, "compression is optional when a raw structural layout is shorter");
   assert.deepEqual(plain(await api.decode(compressed)), plain(await api.decode(uncompressed)));
 });
 
@@ -128,7 +128,7 @@ test("replace and keep old retain the canonical name; failed batches leave input
 test("damaged, unsupported and malformed codes fail without yielding schedules", async () => {
   const code = await api.encode(data);
   await assert.rejects(api.decode(""), /not a valid/);
-  await assert.rejects(api.decode(code.replace(/^WF4/, "WF9")), /not a valid/);
+  await assert.rejects(api.decode(code.replace(/^WF5/, "WF9")), /not a valid/);
   await assert.rejects(api.decode(code.slice(0, -4)), /incomplete|changed/);
   await assert.rejects(api.decode(code.slice(0, 12) + "!" + code.slice(13)), /not a valid/);
   await assert.rejects(api.decode(crafted("not JSON")), /readable/);
@@ -174,11 +174,12 @@ test("raw and wrapped compression have the same portable result", async () => {
   vm.runInContext(source, context);
   const collection = { people: { Person: { classes: Array.from({ length: 30 }, () => ({ ...classItem })) } } };
   const code = await context.WhosFreeShareCode.encode(collection);
-  assert.match(code, /^WF4[ZS]/);
+  assert.match(code, /^WF5[JBTZSV]/);
   assert.deepEqual(plain(await api.decode(code)), plain(await api.decode(await api.encode(collection))));
   const unavailable = vm.createContext({ TextEncoder, TextDecoder, Blob, Uint8Array });
   vm.runInContext(source, unavailable);
-  await assert.rejects(unavailable.WhosFreeShareCode.decode(await api.encode(collection)), /browser cannot open/);
+  const bytes = api.__test.packBinary(api.__test.pack(collection, true), 0);
+  await assert.rejects(unavailable.WhosFreeShareCode.decode(api.__test.wrap(deflateSync(bytes), "S", 5)), /browser cannot open/);
 });
 
 test("arbitrary minute times and unfamiliar course labels survive compact packing", async () => {

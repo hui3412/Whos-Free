@@ -1,8 +1,80 @@
 # Share-code compatibility
 
-New exports use WF4. Import supports WF1, WF2, WF3 and WF4. Do not remove an older
+New exports use WF5. Import supports WF1, WF2, WF3, WF4 and WF5. Do not remove an older
 decoder when introducing a later version. New versions require an updated app
 on the receiving device. All versions remain self-contained and work offline.
+
+## WF5 schedule structure and dense text
+
+WF5 retains exactly the compact fields of WF4. New exports still omit course
+codes/sections and infer instructor surnames without changing the local database.
+All released WF4 JSON and binary layouts remain export candidates. The encoder
+also measures the expanded vocabulary, exact five-minute escapes, per-person time
+units, and structural layouts below. It chooses the smallest payload, raw or
+compressed. Unknown text and unusual UTF-16 retain literal and JSON fallbacks.
+
+The envelope is `WF5` + mode + padding + 15-bit text, containing a little-endian
+four-byte CRC32 followed by the payload. Padding is one character from
+`0123456789abcde`, equal to the trailing zero-bit count. The stable BMP alphabet,
+in order, is U+4E00–U+9FFF, U+3400–U+4DBF and U+AC00–U+C03F. Each character is
+one UTF-16 code unit. Padding, alphabet, checksum and decoded sizes are validated.
+CRC32 detects accidental damage; it does not authenticate or encrypt schedules.
+
+| Mode | Payload | Compression |
+|---|---|---|
+| J / D / Z | WF4 slim JSON | None / raw DEFLATE / wrapped DEFLATE |
+| B / R / S | Binary deltas, shared labels or recurring patterns | None / raw DEFLATE / wrapped DEFLATE |
+| T / U / V | Structural tables and bit-packed columns | None / raw DEFLATE / wrapped DEFLATE |
+
+For B/R/S, WF4 binary layout bits retain their meaning. Dictionary-enabled
+strings now use `WORDS5`, a permanent 152-entry table whose first 31 IDs match
+WF4. IDs 1–31 are single-byte tokens; larger IDs are escaped with byte 0 then
+an unsigned base-128 varint. Literal bytes below 32 use byte 0 then the literal
+byte. Exact Unicode word boundaries and longest phrase matching preserve case
+and spelling. Encoders may use the first 63, 127 or all 152 entries; IDs stay
+unchanged, so the complete table decodes all subsets. Do not reorder this table.
+
+Binary header bit 6 selects a five-minute time table: byte values 0–254 mean
+minute values 0–1270; 255 escapes to an exact-minute varint. This applies to
+absolute starts/durations and requires a one-minute global unit. Header bit 7
+instead selects per-person time units, stored as an index after each person's
+class count for layouts 0/1. Bits 6 and 7 cannot both be set. Layout 2 retains its
+global unit. Irregular times and late-night values are never rounded.
+
+Structural T/U/V headers encode `layoutIndex * 4 + dictionaryIndex` in one byte.
+Dictionary indices 0/1/2/3 select literal UTF-8 / 63 / 127 / 152 entries. Layout
+indices are permanent:
+
+| Index | Layout |
+|---:|---|
+| 0 | Shared start/duration pair table |
+| 1 | Independent start and duration tables |
+| 2 | Independent times with optional per-person weekday tables |
+| 3 | Independent times with sorted label/time tables |
+| 4 | Independent times, byte-aligned person data |
+| 5 | Independent times, byte-aligned columns |
+
+The bit stream uses most-significant bits first, minimum-width table references
+(`ceil(log2(count))`, zero bits for a single item), and unsigned base-128 varints
+written at the current bit position. The three field tables are course title,
+instructor surname and room, in that order. Each entry has a one-bit presence
+flag then a byte-length-prefixed string. A shared class-identity table stores
+course and instructor references plus a one-bit busy flag. Rooms vary separately.
+Time tables store nine-bit five-minute indices 0–287; index 288 escapes to an
+eleven-bit exact minute. Other indices and minutes above 1439 are rejected.
+
+People store their names, the existing semester token, and class count. Columns
+store original weekday order, time references, class-identity references and
+room references. Layout 2 uses a one-bit flag to optionally select a weekday
+table, with a three-bit table count and three-bit weekday entries. Layouts 4/5
+require zero alignment padding. Strings, table sizes, indices, person counts,
+class counts, semesters, minutes, trailing bits and decompressed bytes are bounded
+and validated before schedules are returned. Person and class order stay exact.
+
+WF5 imports retain WF4's in-memory `share_profile: "compact"` marker. Reimports
+skip equivalent schedules without overwriting richer saved metadata. WF1–WF3
+still compare their full fields. Import/export need no network lookup or dictionary
+download. An older app must refresh before it can import a new WF5 code.
 
 ## WF4 compact sharing
 
