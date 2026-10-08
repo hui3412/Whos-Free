@@ -108,6 +108,64 @@ test("dense text and compression ringing at a row boundary are not class borders
   assert.equal(borders.length, 3);
 });
 
+test("a dense dark title inside a coloured class cannot split its busy interval", () => {
+  const column = { day: "Monday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 250, (x, y) => {
+    if ([40, 160, 190, 220].includes(y)) return [215, 215, 215];
+    if ([98, 99].includes(y) && x >= 105 && x <= 193) return [30, 30, 30];
+    return y > 40 && y < 160 ? [198, 198, 255] : [238, 238, 238];
+  });
+  const borders = helpers.borderRows(canvas, column, 20, 230);
+  assert.ok(!borders.some(y => y > 90 && y < 110), "title contrast must not become a grid line");
+  const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 220, rowHeight: 30 });
+  assert.equal(regions.length, 3);
+  assert.ok(Math.abs(regions[0].y0 - 40) < 2);
+  assert.ok(Math.abs(regions[0].y1 - 160) < 2);
+});
+
+test("a compressed tinted stripe within a purple class is not a grey grid line", () => {
+  const column = { day: "Monday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 250, (x, y) => {
+    if ([40, 160, 190, 220].includes(y)) return [215, 215, 215];
+    if (x >= 105 && x <= 193) {
+      if (y === 98) return [208, 210, 254];
+      if (y === 100) return [193, 196, 240];
+      if (y === 102) return [198, 201, 244];
+    }
+    return y > 40 && y < 160 ? [198, 198, 255] : [238, 238, 238];
+  });
+  const borders = helpers.borderRows(canvas, column, 20, 230);
+  assert.ok(!borders.some(y => y > 90 && y < 110));
+  const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 220, rowHeight: 30 });
+  assert.equal(regions.length, 3);
+  assert.ok(Math.abs(regions[0].y1 - 160) < 2);
+});
+
+test("genuine tinted grid lines that reach the column edges remain detectable", () => {
+  const column = { day: "Monday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 220, (_x, y) => [40, 100, 160].includes(y) ? [178, 178, 235] : [198, 198, 255]);
+  const borders = helpers.borderRows(canvas, column, 20, 180);
+  for (const boundary of [40, 100, 160]) assert.ok(borders.some(y => Math.abs(y - boundary) < 2));
+  const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 160, rowHeight: 30 });
+  assert.equal(regions.length, 2);
+});
+
+test("a slightly miscentered column needs a border at only one padded edge", () => {
+  const column = { day: "Monday", left: 100, right: 200, width: 100 };
+  const canvas = pixelCanvas(705, 220, (x, y) => x >= 110 && [40, 100, 160].includes(y) ? [190, 190, 190] : [198, 198, 255]);
+  const regions = helpers.classRegions(canvas, [column], { top: 40, bottom: 160, rowHeight: 30 });
+  assert.equal(regions.length, 2);
+  assert.ok(Math.abs(regions[0].y1 - 100) < 2);
+});
+
+test("an intensive class retains its explicit end time beyond the printed row end", () => {
+  const cells = [{ rect: { day: "Monday", y0: 40, y1: 220, height: 180 }, lines: ["Test intensive", "999-AAA-ZZ sec.00001", "Classroom A-100", "16:15 to 19:15"] }];
+  const classes = helpers.classesFromCells(cells, [{ time: "16:15", y0: 42, y1: 48, center: 45 }], [{ time: "19:05", y0: 212, y1: 218, center: 215 }], 30);
+  assert.equal(classes.length, 1);
+  assert.equal(classes[0].start, "16:15");
+  assert.equal(classes[0].end, "19:15");
+});
+
 test("border alignment preserves the existing 15/35-minute timetable format", () => {
   const source = Array.from({ length: 20 }, (_, index) => {
     const minute = 495 + Math.floor(index / 2) * 30 + (index % 2 ? 20 : 0);

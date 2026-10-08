@@ -280,8 +280,11 @@
     const { data } = canvas.getContext("2d").getImageData(left, 0, width, canvas.height);
     const hits = [];
     const offsetY = Math.max(2, Math.ceil(scale * 1.3));
+    const samples = Math.ceil(width / 2);
+    const edgeSamples = Math.max(2, Math.ceil(samples * .04));
     for (let y = Math.max(offsetY, Math.floor(minimumY * scale)); y < Math.min(canvas.height - offsetY, Math.ceil(maximumY * scale) + offsetY); y += 1) {
       let matches = 0;
+      let leftMatches = 0, rightMatches = 0;
       const shades = [];
       const aboveShades = [], belowShades = [];
       for (let x = 0; x < width; x += 2) {
@@ -297,9 +300,16 @@
         aboveShades.push(aboveGray); belowShades.push(belowGray);
         const neighbor = Math.max(aboveGray, belowGray);
         const transition = Math.max(Math.abs(data[above] - data[below]), Math.abs(data[above + 1] - data[below + 1]), Math.abs(data[above + 2] - data[below + 2]));
-        if (neighbor - gray > 3 || transition > 18) matches += 1;
+        if (neighbor - gray > 3 || transition > 18) {
+          matches += 1;
+          if (x / 2 < edgeSamples) leftMatches += 1;
+          if (x / 2 >= samples - edgeSamples) rightMatches += 1;
+        }
       }
-      if (matches / Math.ceil(width / 2) >= 0.72) {
+      // A full grid line also reaches the padding at a column edge. Compression
+      // ringing around a wide title can cover most of its coloured cell,
+      // but leaves the padding beside that title without a border.
+      if (matches / samples >= .72 && Math.max(leftMatches, rightMatches) / edgeSamples >= .6) {
         shades.sort((a, b) => a - b);
         aboveShades.sort((a, b) => a - b); belowShades.sort((a, b) => a - b);
         // A border has nearly uniform brightness. Dense text and JPEG ringing
