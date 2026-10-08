@@ -382,6 +382,25 @@
     return groups.map(group => (group[0] + group[group.length - 1]) / 2);
   }
 
+  function readTimeGrid(items, headerBottom, evidence) {
+    const grid = timeGrid(items, headerBottom, evidence);
+    if (evidence?.canvas?.getContext) {
+      // A consistent subset is not a complete timetable. Full-page sparse OCR
+      // can miss every afternoon clock while still yielding eight good labels.
+      // Two continuing gutter rules prove that more rows remain to be read.
+      const x0 = grid.items[0].x0, x1 = grid.items[0].x1;
+      const padding = Math.max(2, (x1 - x0) * .12);
+      const gutter = { left: Math.max(0, x0 - padding), right: Math.min(evidence.column.left, x1 + padding) };
+      gutter.width = gutter.right - gutter.left;
+      const continued = borderRows(evidence.canvas, gutter, grid.bottom + grid.rowHeight * .6, grid.bottom + grid.rowHeight * 2.3);
+      const hasRow = row => continued.some(y => Math.abs(y - grid.bottom - row * grid.rowHeight) < Math.max(2, grid.rowHeight * .12));
+      if ((hasRow(1) && hasRow(2)) || grid.top - headerBottom > grid.rowHeight * .75) {
+        throw new Error("Only part of the visible time column was read. Retrying its remaining rows.");
+      }
+    }
+    return grid;
+  }
+
   function classRegions(canvas, columns, grid) {
     const rects = [];
     for (const column of columns) {
@@ -580,7 +599,7 @@
       stage = "Reading the time column";
       let grid;
       try {
-        grid = timeGrid(fullItems.filter(item => item.x1 <= columns[0].left + 2), headerBottom, { canvas, column: columns[0] });
+        grid = readTimeGrid(fullItems.filter(item => item.x1 <= columns[0].left + 2), headerBottom, { canvas, column: columns[0] });
       } catch {
         // Leave enough room for the final digit: header text can be off-center.
         await worker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "0123456789:." });
@@ -589,16 +608,16 @@
         const rectangle = { left, top: Math.max(0, Math.floor(headerBottom / scale)), width: right - left, height: canvas.height - Math.floor(headerBottom / scale) };
         const gutter = await worker.recognize(canvas, { rectangle }, { blocks: true });
         const evidence = { canvas, column: columns[0] };
-        try { grid = timeGrid(wordsFromData(gutter.data, scale).filter(item => item.x1 <= columns[0].left + 3), headerBottom, evidence); }
+        try { grid = readTimeGrid(wordsFromData(gutter.data, scale).filter(item => item.x1 <= columns[0].left + 3), headerBottom, evidence); }
         catch {
           for (const [mode, contrast] of [["11", false], ["6", true]]) {
             stage = contrast ? "Retrying faint time labels" : "Retrying the time column without grid lines";
             const words = await patchWords(worker, canvas, rectangle, scale,
               { tessedit_pageseg_mode: mode, tessedit_char_whitelist: "0123456789:." }, { contrast, removeRules: true });
-            try { grid = timeGrid(words.filter(item => item.x1 <= columns[0].left + 3), headerBottom, evidence); break; }
+            try { grid = readTimeGrid(words.filter(item => item.x1 <= columns[0].left + 3), headerBottom, evidence); break; }
             catch { /* Continue to the next independent reading method. */ }
           }
-          if (!grid) throw new Error("Could not validate the time column after several on-device reading methods. Include all the times and grid borders in a clear, upright screenshot. (Reader 50: time column)");
+          if (!grid) throw new Error("Could not validate the full time column after several on-device reading methods. Include all the times and grid borders in a clear, upright screenshot. (Reader 51: time column)");
         }
       }
       status("Isolating the timetable from the rest of the picture…");
@@ -670,7 +689,7 @@
       const name = globalThis.WhosFreeParser.extractScheduleName(fullItems) || "";
       return { name, person: { source_file: filename, classes }, needsReview: true };
     } catch (error) {
-      throw new Error(`${error.message || "The picture could not be read."}${String(error.message).includes("Reader 50:") ? "" : ` (Reader 50: ${stage.toLowerCase()})`}`);
+      throw new Error(`${error.message || "The picture could not be read."}${String(error.message).includes("Reader 51:") ? "" : ` (Reader 51: ${stage.toLowerCase()})`}`);
     } finally {
       bootFailed = true;
       clearTimeout(bootTimer);
@@ -718,6 +737,6 @@
     finally { canvas.width = canvas.height = 1; }
   }
 
-  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { wordsFromData, timeGrid, boundaryTimeGrid, recognitionPatch, patchWords, borderRows, headersFromItems, classesFromCells, classRegions, containsInk, isolateTimetable } };
+  globalThis.WhosFreeImageParser = { parseScheduleImage, parseScheduleCanvas, __test: { wordsFromData, timeGrid, readTimeGrid, boundaryTimeGrid, recognitionPatch, patchWords, borderRows, headersFromItems, classesFromCells, classRegions, containsInk, isolateTimetable } };
 })();
 
