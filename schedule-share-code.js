@@ -167,11 +167,11 @@
     validatePayload(payload);
     return payload;
   }
-  function packBinary(payload, variant, dictionary = false) {
+  function packBinary(payload, variant, dictionary = false, options = {}) {
     // Try literal labels, shared strings, and recurring class patterns. Keep row
     // order and exact minutes; the selected time unit must divide every time.
     const rows = payload.p.flatMap(person => person.c);
-    const step = [...STEPS].reverse().find(unit => rows.every(row => time(row[1]) % unit === 0 && (time(row[2]) - time(row[1])) % unit === 0));
+    const step = options.timeTable ? 1 : [...STEPS].reverse().find(unit => rows.every(row => time(row[1]) % unit === 0 && (time(row[2]) - time(row[1])) % unit === 0));
     const out = [];
     const byte = value => {
       if (out.length >= MAX_BYTES) throw new Error("Binary selection is too large.");
@@ -181,12 +181,15 @@
       do { const next = value % 128; value = Math.floor(value / 128); byte(next | (value ? 128 : 0)); } while (value);
     };
     const string = value => {
-      const encoded = dictionary ? tokenize(value) : value;
-      const bytes = new TextEncoder().encode(encoded);
+      const modern = dictionary && options.dictIndex ? DICTS5[options.dictIndex] : null;
+      const encoded = modern ? value : dictionary ? tokenize(value) : value;
+      const literalBytes = new TextEncoder().encode(encoded);
+      const bytes = modern ? modern.encode(value) : literalBytes;
       // UTF-8 replaces lone surrogates. Let the JSON candidate preserve them.
-      if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== encoded) throw new Error("Use JSON for this label.");
+      if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(literalBytes) !== encoded) throw new Error("Use JSON for this label.");
       integer(bytes.length); for (const value of bytes) byte(value);
     };
+    const writeTime = value => { if(value % 5 === 0 && value / 5 < 255) byte(value / 5); else { byte(255); integer(value); } };
     const strings = [], ids = new Map();
     if (variant) for (const row of rows) for (const label of row.slice(3, 8)) {
       if (label && !ids.has(label)) { ids.set(label, strings.length); strings.push(label); }
@@ -200,7 +203,7 @@
     };
     const patternKey = row => JSON.stringify([time(row[1]), time(row[2]), ...FIELDS.map((_, i) => row[i + 3] || null), row[8] || null]);
     const patterns = [], patternIds = new Map();
-    byte(variant | (STEPS.indexOf(step) << 2) | (dictionary ? 32 : 0));
+    byte(variant | (STEPS.indexOf(step) << 2) | (dictionary ? 32 : 0) | (options.timeTable ? 64 : options.personUnits ? 128 : 0));
     if (variant) { integer(strings.length); for (const label of strings) string(label); }
     if (variant === 2) {
       for (const row of rows) {
@@ -209,7 +212,7 @@
       }
       integer(patterns.length);
       for (const row of patterns) {
-        integer(time(row[1]) / step); integer((time(row[2]) - time(row[1])) / step); labels(row);
+        if(options.timeTable){writeTime(time(row[1]));writeTime(time(row[2])-time(row[1]));}else{integer(time(row[1])/step);integer((time(row[2])-time(row[1]))/step);} labels(row);
       }
     }
     integer(payload.p.length);
@@ -217,20 +220,20 @@
       string(person.n);
       integer(person.s === undefined ? 0 : person.s === null ? 1 : 2 + (Number(person.s.slice(-4)) - 2000) * 2 + (person.s.startsWith("Fall") ? 1 : 0));
       integer(person.c.length);
-      const previous = DAYS.map(() => 480 / step);
+      const localStep = options.personUnits && variant !== 2 ? [...STEPS].reverse().find(unit => person.c.every(row => time(row[1]) % unit === 0 && (time(row[2]) - time(row[1])) % unit === 0)) : step;
+      if(options.personUnits && variant !== 2)byte(STEPS.indexOf(localStep));
+      const previous = DAYS.map(() => 480 / localStep);
       for (const row of person.c) {
         if (variant === 2) integer(patternIds.get(patternKey(row)) * 8 + row[0]);
         else {
-          const start = time(row[1]) / step, delta = start - previous[row[0]];
-          integer((delta < 0 ? -delta * 2 - 1 : delta * 2) * 8 + row[0]);
-          previous[row[0]] = start;
-          integer((time(row[2]) - time(row[1])) / step); labels(row);
+          if(options.timeTable){byte(row[0]);writeTime(time(row[1]));writeTime(time(row[2])-time(row[1]));}
+          else{const start=time(row[1])/localStep,delta=start-previous[row[0]];integer((delta<0?-delta*2-1:delta*2)*8+row[0]);previous[row[0]]=start;integer((time(row[2])-time(row[1]))/localStep);} labels(row);
         }
       }
     }
     return Uint8Array.from(out);
   }
-  function unpackBinary(bytes, version4 = false) {
+  function unpackBinary(bytes, version4 = false, version5 = false) {
     const invalid = () => { throw new Error("This code does not contain valid schedule data."); };
     let offset = 0;
     const byte = () => { if (offset >= bytes.length) invalid(); return bytes[offset++]; };
@@ -246,13 +249,15 @@
       const length = integer(600);
       if (offset + length > bytes.length) invalid();
       let value;
-      try { value = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(offset, offset + length)); } catch { invalid(); }
+      try { value = version5 && dictionary ? DICTS5[3].decode(bytes.subarray(offset,offset+length)) : new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(offset, offset + length)); } catch { invalid(); }
       offset += length;
-      if (dictionary) { try { value = untokenize(value); } catch { invalid(); } }
+      if (dictionary && !version5) { try { value = untokenize(value); } catch { invalid(); } }
       if (value.length > 200) invalid(); return value;
     };
     const header = byte(), variant = header & 3, dictionary = version4 && Boolean(header & 32), step = STEPS[(version4 ? header & 31 : header) >> 2];
-    if (variant > 2 || !step || (version4 && header & 192)) invalid();
+    const timeTable = version5 && Boolean(header & 64), personUnits = version5 && Boolean(header & 128);
+    if (variant > 2 || !step || (version4 && !version5 && header & 192) || (timeTable && (personUnits || step !== 1))) invalid();
+    const readTime = () => { const value=byte();return value===255?integer(1439):value*5; };
     const strings = [];
     if (variant) { const count = integer(50000); for (let i = 0; i < count; i++) strings.push(string()); }
     const labels = () => {
@@ -265,8 +270,8 @@
       }), mask & 32 ? "busy_block" : null];
     };
     const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
-    const row = (day, start, duration, details) => {
-      start *= step; duration *= step;
+    const row = (day, start, duration, details, unit = step) => {
+      start *= unit; duration *= unit;
       if (day > 6 || start < 0 || duration < 1 || start + duration > 1439) invalid();
       return [day, clock(start), clock(start + duration), ...details];
     };
@@ -274,7 +279,7 @@
     if (variant === 2) {
       const count = integer(10000);
       for (let i = 0; i < count; i++) {
-        const start = integer(1439), duration = integer(1439), details = labels();
+        const start = timeTable ? readTime() : integer(1439), duration = timeTable ? readTime() : integer(1439), details = labels();
         row(0, start, duration, details); patterns.push({ start, duration, details });
       }
     }
@@ -284,18 +289,21 @@
       const name = string(), semester = integer(201), entries = integer(500);
       total += entries; if (total > 10000) invalid();
       const person = { n: name, ...(semester ? { s: semester === 1 ? null : `${(semester - 2) % 2 ? "Fall" : "Winter"} ${2000 + Math.floor((semester - 2) / 2)}` } : {}), c: [] };
-      const previous = DAYS.map(() => 480 / step);
+      const localStep = personUnits && variant !== 2 ? STEPS[byte()] : step;
+      if(!localStep)invalid();
+      const previous = DAYS.map(() => 480 / localStep);
       for (let j = 0; j < entries; j++) {
         if (variant === 2) {
           if (!patterns.length) invalid();
           const token = integer(patterns.length * 8 - 1), pattern = patterns[Math.floor(token / 8)];
           person.c.push(row(token & 7, pattern.start, pattern.duration, pattern.details));
-        } else {
+        } else if(timeTable){person.c.push(row(byte(),readTime(),readTime(),labels()));}
+        else {
           const token = integer(23031), day = token & 7;
           if (day > 6) invalid();
           const delta = Math.floor(token / 8), start = previous[day] + (delta % 2 ? -(delta + 1) / 2 : delta / 2);
           previous[day] = start;
-          const duration = integer(1439); person.c.push(row(day, start, duration, labels()));
+          const duration = integer(1439); person.c.push(row(day, start, duration, labels(), localStep));
         }
       }
       people.push(person);
@@ -303,11 +311,143 @@
     if (offset !== bytes.length) invalid();
     const payload = { v: 1, p: people }; validatePayload(payload); return payload;
   }
+  // WF5 vocabulary is permanent. Prefix subsets share IDs and decode against
+  // the complete table, so trying smaller dictionaries needs no extra metadata.
+  const WORDS5 = Object.freeze(["Differential Calculus", "General Chemistry", "Introduction to College", "Cellular Biology", "Calcul différentiel", "Chimie générale", "Probability and Stat", "Programming in Scien", "Renforcement en fran", "Oeuvres narratives e", "North American Selec", "Introduction to Coll", "Introduction to", "Calculus", "calculus", "Calcul", "Chemistry", "Biology", "Mechanics", "Mécanique", "Mathematics", "Mathématiques", "Physics", "Physique", "English", "French", "History", "Philosophy", "Psychology", "Psychologie", "Literature", "Introduction to Psychology", "Introduction to Sociology", "Introduction to Business", "Introduction to World", "Introduction to Literature", "Introduction to Programming", "Organic Chemistry", "Physical Education", "World History", "Linear Algebra", "Integral Calculus", "Applied Mathematics", "Environmental Science", "Computer Science", "Programming in Science", "English Literature", "French Literature", "Social Science", "Political Science", "Human Biology", "General Biology", "General Physics", "Fitness Conditioning", "Music Literature", "Ear Training", "String Lab", "Introduction to Psyc", "Introduction to Worl", "Probability and Statistics", "Calcul intégral", "Algèbre linéaire", "Philosophie et rationalité", "Littérature et imaginaire", "Écriture et littérature", "Méthodes de travail", "Éducation physique", "Sciences humaines", "Sciences de la nature", "Introduction à", "Chimie organique", "Biologie cellulaire", "Statistiques", "19th Century", "20th Century", "Century", "Thinker", "Knowledge", "Science", "Business", "College", "Fitness", "Volleyball", "Badminton", "Basketball", "Swimming", "Soccer", "Dance", "Yoga", "Training", "Music", "Art", "Arts", "Communication", "Computer", "Programming", "Technology", "Engineering", "Sociology", "Anthropology", "Economics", "Geography", "Humanities", "Theatre", "Theater", "Ethics", "Religion", "Statistics", "Algebra", "Differential", "Integral", "General", "Organic", "Physical", "Environmental", "Cellular", "Laboratory", "Laboratoire", "Littérature", "Français", "Anglais", "Histoire", "Philosophie", "Sociologie", "Économie", "Géographie", "Chimie", "Biologie", "Informatique", "Programmation", "Sciences", "Méthodes", "Travail", "Renforcement", "Oeuvres", "Œuvres", "narratives", "Honours", "ENRICHED", "Enriched", "INTENSIVE", "Intensive", "Introduction", "Psych", "Theor", "Theory", "lab", "Lab", "CL", "CL1", "CL2", "CL12"]);
+  function dictionary5(table) {
+    const indices = new Map(table.map((word, i) => [word, i + 1]));
+    const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(^|[^\\p{L}\\p{N}\\p{M}_])(${[...table].sort((a,b) => b.length-a.length).map(escape).join("|")})(?=$|[^\\p{L}\\p{N}\\p{M}_])`, "gu");
+    const fail = () => { throw new Error("This code does not contain valid schedule data."); };
+    return {
+      encode(value) {
+        const out = [], encoder = new TextEncoder();
+        if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(encoder.encode(value)) !== value) throw new Error("Use JSON for this label.");
+        const literal = text => { for (const byte of encoder.encode(text)) { if (byte < 32) out.push(0); out.push(byte); } };
+        let offset = 0;
+        for (const match of value.matchAll(pattern)) {
+          const start = match.index + match[1].length;
+          literal(value.slice(offset, start));
+          let id = indices.get(match[2]);
+          if (id <= 31) out.push(id);
+          else { out.push(0); do { const next=id%128; id=Math.floor(id/128); out.push(next | (id ? 128 : 0)); } while (id); }
+          offset=start+match[2].length;
+        }
+        literal(value.slice(offset)); return Uint8Array.from(out);
+      },
+      decode(bytes) {
+        let out="", literals=[];
+        const flush=()=>{ if(literals.length){try{out+=new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(Uint8Array.from(literals));}catch{fail();}literals=[];}if(out.length>200)fail(); };
+        for(let i=0;i<bytes.length;i++) {
+          const byte=bytes[i];
+          if(byte>=32){literals.push(byte);continue;}
+          flush();
+          if(byte){if(!table[byte-1])fail();out+=table[byte-1];}
+          else {
+            if(++i>=bytes.length)fail();
+            const next=bytes[i];
+            if(next<=31)out+=String.fromCharCode(next);
+            else {
+              let id=0,bits=0,v=next;
+              for(;;){id+=(v&127)*2**bits;if(v<128)break;if(++i>=bytes.length||bits>=21)fail();bits+=7;v=bytes[i];}
+              if(id<32||id>table.length||(bits&&v===0))fail();out+=table[id-1];
+            }
+          }
+          if(out.length>200)fail();
+        }
+        flush();return out;
+      }
+    };
+  }
+  const DICTS5 = [null, dictionary5(WORDS5.slice(0,63)), dictionary5(WORDS5.slice(0,127)), dictionary5(WORDS5)];
+  const alphabet15 = index => String.fromCharCode(index<20992 ? 0x4e00+index : index<27584 ? 0x3400+index-20992 : 0xac00+index-27584);
+  const index15 = value => value>=0x4e00&&value<=0x9fff ? value-0x4e00 : value>=0x3400&&value<=0x4dbf ? value-0x3400+20992 : value>=0xac00&&value<=0xc03f ? value-0xac00+27584 : -1;
+  function base15(bytes) {
+    const out=[];let bits=0,buffer=0;
+    for(const byte of bytes){buffer=(buffer<<8)|byte;bits+=8;while(bits>=15){bits-=15;out.push(alphabet15((buffer>>>bits)&32767));}buffer&=(1<<bits)-1;}
+    if(bits)out.push(alphabet15((buffer<<(15-bits))&32767));
+    return "0123456789abcde"[(15-bits)%15]+out.join("");
+  }
+  function unbase15(text) {
+    const invalid=()=>{throw new Error("The code is incomplete or changed. Paste the full export code.");};
+    const padding="0123456789abcde".indexOf(text[0]),length=((text.length-1)*15-padding)/8;
+    if(padding<0||!Number.isInteger(length)||length<1||length>MAX_BYTES+4)invalid();
+    const bytes=new Uint8Array(length);let bits=0,buffer=0,offset=0;
+    for(let i=1;i<text.length;i++){const index=index15(text.charCodeAt(i));if(index<0)invalid();buffer=(buffer<<15)|index;bits+=15;while(bits>=8){bits-=8;const byte=(buffer>>>bits)&255;if(offset<length)bytes[offset++]=byte;else if(byte)invalid();}buffer&=(1<<bits)-1;}
+    if(buffer||base15(bytes)!==text)invalid();return bytes;
+  }
+  const factor5 = (() => {
+    const invalid=()=>{throw new Error("This code does not contain valid schedule data.");};
+    const assert={ok:value=>{if(!value)invalid();},equal:(a,b)=>{if(a!==b)invalid();}};
+    class Writer {
+      constructor(){this.bytes=[];this.used=0;this.value=0;this.length=0;}
+      bits(n,k){assert.ok(Number.isInteger(n)&&n>=0&&n<2**k);if(this.length+k>MAX_BYTES*8)invalid();for(let i=k-1;i>=0;i--){this.value=this.value*2+Math.floor(n/2**i)%2;this.used++;this.length++;if(this.used===8){this.bytes.push(this.value);this.used=0;this.value=0;}}}
+      int(n){assert.ok(Number.isInteger(n)&&n>=0&&n<2**28);do{const byte=n%128;n=Math.floor(n/128);this.bits(byte+(n?128:0),8);}while(n);}
+      finish(){if(this.used)this.bytes.push(this.value*2**(8-this.used));return Uint8Array.from(this.bytes);}
+    }
+    class Reader {
+      constructor(bytes){this.bytes=bytes;this.pos=0;}
+      bits(k){if(this.pos+k>this.bytes.length*8)invalid();let n=0;for(let i=0;i<k;i++){n=n*2+(this.bytes[Math.floor(this.pos/8)]>>>(7-this.pos%8)&1);this.pos++;}return n;}
+      int(max=10000){let n=0;for(let i=0;i<4;i++){const byte=this.bits(8);n+=(byte&127)*2**(7*i);if(byte<128){if(n>max||(i&&byte===0))invalid();return n;}}invalid();}
+      index(table,k){const i=this.bits(k);if(i>=table.length)invalid();return table[i];}
+      end(){if(this.bytes.length*8-this.pos>=8)invalid();while(this.pos<this.bytes.length*8)if(this.bits(1))invalid();}
+    }
+    const width=n=>n<=1?0:Math.ceil(Math.log2(n));
+const min=t=>Number(t.slice(0,2))*60+Number(t.slice(3)),clock=t=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+const table=xs=>{const a=[],ids=new Map();for(const x of xs){const k=JSON.stringify(x);if(!ids.has(k)){ids.set(k,a.length);a.push(x);}}return {a,id:x=>ids.get(JSON.stringify(x))};};
+const configs=[{name:'field-local-tables',split:false},{name:'independent-start-duration-tables',split:true},{name:'weekday-columns',split:true,days:true},{name:'sorted-tables',split:true,sort:true},{name:'byte-align-people',split:true,align:true},{name:'byte-align-columns',split:true,columns:true}];
+function encode(payload,cfg,di=3){
+  const w=new Writer(),dict=DICTS5[di];w.bits(configs.indexOf(cfg)*4+di,8);
+  const writeText=s=>{const bytes=dict?dict.encode(s):new TextEncoder().encode(s);if(!dict&&new TextDecoder('utf-8',{ignoreBOM:true}).decode(bytes)!==s)throw Error("Use JSON for this label.");w.int(bytes.length);for(const b of bytes)w.bits(b,8);};
+  const rows=payload.p.flatMap(p=>p.c),fields=[3,7,6].map(f=>table(rows.map(r=>r[f]??null)));
+  if(cfg.sort)for(const t of fields){t.a.sort((a,b)=>String(a).localeCompare(String(b),'en'));const indices=new Map(t.a.map((x,i)=>[JSON.stringify(x),i]));t.id=x=>indices.get(JSON.stringify(x));}
+  for(const t of fields){w.int(t.a.length);for(const s of t.a){w.bits(s===null?0:1,1);if(s!==null)writeText(s);}}
+  const details=table(rows.map(r=>[r[3]??null,r[7]??null,r[8]??null])),dw=width(details.a.length),fw=fields.map(t=>width(t.a.length));
+  w.int(details.a.length);for(const a of details.a){w.bits(fields[0].id(a[0]),fw[0]);w.bits(fields[1].id(a[1]),fw[1]);w.bits(a[2]==='busy_block'?1:0,1);}
+  const times=cfg.split?[table(rows.map(r=>min(r[1]))),table(rows.map(r=>min(r[2])-min(r[1])))]:[table(rows.map(r=>[min(r[1]),min(r[2])-min(r[1])]))];
+  if(cfg.sort)for(const t of times){t.a.sort((a,b)=>a-b);const indices=new Map(t.a.map((x,i)=>[JSON.stringify(x),i]));t.id=x=>indices.get(JSON.stringify(x));}
+  const writeTime=n=>{w.bits(n%5===0?n/5:288,9);if(n%5)w.bits(n,11);};
+  for(const t of times){w.int(t.a.length);for(const x of t.a)for(const n of Array.isArray(x)?x:[x])writeTime(n);}
+  const align=()=>{while(w.length%8)w.bits(0,1);};
+  w.int(payload.p.length);
+  for(const p of payload.p){writeText(p.n);w.int(p.s===undefined?0:p.s===null?1:2+(Number(p.s.slice(-4))-2000)*2+(p.s.startsWith('Fall')?1:0));w.int(p.c.length);
+    // Columns preserve original row order; days use three bits unless a small
+    // day table saves bits after counting its explicit overhead.
+    if(cfg.days){const days=table(p.c.map(r=>r[0]));const use=3+days.a.length*3+p.c.length*width(days.a.length)<p.c.length*3;w.bits(use?1:0,1);if(use){w.bits(days.a.length,3);for(const day of days.a)w.bits(day,3);for(const r of p.c)w.bits(days.id(r[0]),width(days.a.length));}else for(const r of p.c)w.bits(r[0],3);}else for(const r of p.c)w.bits(r[0],3);
+    if(cfg.columns)align();
+    for(let i=0;i<times.length;i++){for(const r of p.c)w.bits(times[i].id(cfg.split?(i?min(r[2])-min(r[1]):min(r[1])):[min(r[1]),min(r[2])-min(r[1])]),width(times[i].a.length));if(cfg.columns)align();}
+    for(const r of p.c)w.bits(details.id([r[3]??null,r[7]??null,r[8]??null]),dw);
+    if(cfg.columns)align();
+    for(const r of p.c)w.bits(fields[2].id(r[6]??null),fw[2]);
+    if(cfg.align||cfg.columns)align();
+  }return w.finish();
+}
+function decode(bytes){
+  const r=new Reader(bytes),h=r.bits(8),cfg=configs[Math.floor(h/4)],dict=DICTS5[h%4];assert.ok(cfg);
+  const readText=()=>{const b=Uint8Array.from({length:r.int(600)},()=>r.bits(8));let value;try{value=dict?dict.decode(b):new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(b);}catch{invalid();}if(value.length>200)invalid();return value;};
+  const fields=Array.from({length:3},()=>Array.from({length:r.int()},()=>r.bits(1)?readText():null)),fw=fields.map(t=>width(t.length));
+  const details=Array.from({length:r.int()},()=>[r.index(fields[0],fw[0]),r.index(fields[1],fw[1]),r.bits(1)?'busy_block':null]),dw=width(details.length);
+  const readTime=()=>{const n=r.bits(9);assert.ok(n<=288);const value=n===288?r.bits(11):n*5;if(value>1439)invalid();return value;};
+  const times=Array.from({length:cfg.split?2:1},()=>Array.from({length:r.int()},()=>cfg.split?readTime():[readTime(),readTime()]));
+  const align=()=>{while(r.pos%8)assert.equal(r.bits(1),0);};
+  let total=0;const count=r.int(250);if(!count)invalid();const p=Array.from({length:count},()=>{const n=readText(),s=r.int(201),nc=r.int(500),rs=Array.from({length:nc},()=>({}));total+=nc;if(total>10000)invalid();
+    if(cfg.days&&r.bits(1)){const ds=Array.from({length:r.bits(3)},()=>r.bits(3));for(const x of rs)x.day=r.index(ds,width(ds.length));}else for(const x of rs)x.day=r.bits(3);
+    if(cfg.columns)align();
+    for(let i=0;i<times.length;i++){for(const x of rs){const t=r.index(times[i],width(times[i].length));if(cfg.split){if(i)x.duration=t;else x.start=t;}else [x.start,x.duration]=t;}if(cfg.columns)align();}
+    for(const x of rs)x.d=r.index(details,dw);if(cfg.columns)align();for(const x of rs)x.room=r.index(fields[2],fw[2]);if(cfg.align||cfg.columns)align();
+    return {n,...(s?{s:s===1?null:`${(s-2)%2?'Fall':'Winter'} ${2000+Math.floor((s-2)/2)}`}:{}) ,c:rs.map(x=>[x.day,clock(x.start),clock(x.start+x.duration),x.d[0],null,null,x.room,x.d[1],x.d[2]])};
+  });r.end();const payload={v:1,p};validatePayload(payload);return payload;
+}
+
+return {encode,decode,configs};
+
+  })();
+
   function wrap(bytes, mode, version = 2) {
     const checked = new Uint8Array(bytes.length + 4);
     new DataView(checked.buffer).setUint32(0, checksum(bytes), true);
     checked.set(bytes, 4);
-    return `WF${version}${mode}${base14(checked)}`;
+    return `WF${version}${mode}${(version === 5 ? base15(checked) : base14(checked))}`;
   }
   async function encode(data) {
     const payload = pack(data, true);
@@ -320,8 +460,20 @@
         catch { /* JSON preserves unusual Unicode and stays available at size limits. */ }
       }
     }
+    // Keep every released WF4 candidate as a fallback. Additional WF5 layouts
+    // retain the same fields; literal/JSON paths preserve unknown vocabulary.
+    for(const dictIndex of [1,2,3])for(let variant=0;variant<3;variant++){
+      for(const timeTable of [false,true])try{candidates.push({bytes:packBinary(payload,variant,true,{dictIndex,timeTable}),modes:["B","R","S"]});}catch{}
+    }
+    for(let variant=0;variant<2;variant++)try{candidates.push({bytes:packBinary(payload,variant,true,{dictIndex:3,personUnits:true}),modes:["B","R","S"]});}catch{}
+    for(const config of factor5.configs)for(let dictionary=0;dictionary<4;dictionary++)try{candidates.push({bytes:factor5.encode(payload,config,dictionary),modes:["T","U","V"]});}catch{}
     let mode = "J";
+    const seen=new Map();
     for (const candidate of candidates) {
+      const signature=`${candidate.modes[0]}/${candidate.bytes.length}/${checksum(candidate.bytes)}`;
+      const duplicates=seen.get(signature)||[];
+      if(duplicates.some(prior=>prior.every((byte,i)=>byte===candidate.bytes[i])))continue;
+      duplicates.push(candidate.bytes);seen.set(signature,duplicates);
       if (candidate.bytes.length < bytes.length) { bytes = candidate.bytes; mode = candidate.modes[0]; }
       if (typeof CompressionStream !== "function") continue;
       for (const [i, format] of ["deflate-raw", "deflate"].entries()) {
@@ -332,7 +484,7 @@
         } catch { /* Older browsers can use wrapped DEFLATE or uncompressed data. */ }
       }
     }
-    const code = wrap(bytes, mode, 4);
+    const code = wrap(bytes, mode, 5);
     if (code.length > MAX_CODE) throw new Error("This selection is too large. Export fewer schedules at once.");
     return code;
   }
@@ -364,6 +516,15 @@
       if (buffer || Math.ceil(length * 8 / 5) !== text.length || checksum(bytes).toString(16).padStart(8, "0").toUpperCase() !== legacy.slice(4, 12)) throw new Error("The code is incomplete or changed. Ask your friend to copy it again.");
       if (legacy[3] === "G") bytes = await decompress(bytes, "gzip");
       payload = json(bytes); validatePayload(payload);
+    } else if(/^WF5[JDZBRSTUV]/.test(code)){
+      if(!/^WF5[JDZBRSTUV][0-9a-e][\u3400-\u4dbf\u4e00-\u9fff\uac00-\uc03f]+$/.test(code))throw new Error("That is not a valid Who’s Free? export code. Paste the full code from your friend.");
+      const checked=unbase15(code.slice(4));
+      if(checked.length<4)throw new Error("The code is incomplete or changed.");
+      let bytes=checked.subarray(4);
+      if(checksum(bytes)!==new DataView(checked.buffer).getUint32(0,true))throw new Error("The code is incomplete or changed. Ask your friend to copy it again.");
+      if("DRU".includes(code[3]))bytes=await decompress(bytes,"deflate-raw");
+      else if("ZSV".includes(code[3]))bytes=await decompress(bytes,"deflate");
+      payload="TUV".includes(code[3])?factor5.decode(bytes):"BRS".includes(code[3])?unpackBinary(bytes,true,true):unpackCompact(json(bytes),true);
     } else {
       if (!/^WF(?:2[JDZ]|[34][JDZBRS])[0-6][\u4e00-\u8dff]+$/.test(code)) throw new Error("That is not a valid Who’s Free? export code. Paste the full code from your friend.");
       const checked = unbase14(code.slice(4));
@@ -383,7 +544,7 @@
         kind: row[8] || "class",
       })) };
     }
-    return { schema_version: 1, ...(code[2] === "4" ? { share_profile: "compact" } : {}), people };
+    return { schema_version: 1, ...("45".includes(code[2]) ? { share_profile: "compact" } : {}), people };
   }
   function sameSchedule(a, b, compact = false) {
     const signature = person => JSON.stringify([
@@ -430,6 +591,6 @@
     }
     return { data: { ...(existing || {}), schema_version: existing?.schema_version || 1, people }, added, replaced, skipped, kept, renamed };
   }
-  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, sameSchedule, pack, packCompact, packBinary, unpackBinary, familyName, tokenize, untokenize, WORDS } };
+  globalThis.WhosFreeShareCode = { encode, decode, merge, __test: { base14, unbase14, wrap, MAX_BYTES, sameSchedule, pack, packCompact, packBinary, unpackBinary, familyName, tokenize, untokenize, WORDS, WORDS5, DICTS5, base15, unbase15, alphabet15, factor5 } };
 })();
 

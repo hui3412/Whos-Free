@@ -19,9 +19,9 @@ function wf3(data) {
   return candidates.flatMap(([bytes, raw, zipped]) => [api.__test.wrap(bytes, raw, 3), api.__test.wrap(deflateRawSync(bytes), zipped, 3)]).sort((a, b) => a.length - b.length)[0];
 }
 
-test("WF4 shares only requested details without editing the local collection", async () => {
+test("new exports retain WF4 requested details without editing the local collection", async () => {
   const before = plain(data), code = await api.encode(data), actual = await api.decode(code);
-  assert.match(code, /^WF4/);
+  assert.match(code, /^WF5/);
   assert.equal(actual.share_profile, "compact");
   assert.equal(actual.people.Student.semester, "Fall 2026");
   assert.deepEqual(plain(actual.people.Student.classes), data.people.Student.classes.map(item => ({ ...item, course_code: null, section: null, instructor: "Lim" })));
@@ -98,7 +98,7 @@ test("compact reimports skip without removing richer local metadata; real timeta
   assert.equal(calls, 1, "older full-detail imports continue comparing sections");
 });
 
-test("WF4 measures dictionary savings against WF3 and selects the smallest tested payload", async () => {
+test("new exports keep released WF4 candidates as size fallbacks", async () => {
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
   const courses = ["Calcul différentiel", "General Chemistry", "Introduction to College English", "Cellular Biology (CL)", "Mechanics"];
   const sizes = [];
@@ -112,7 +112,7 @@ test("WF4 measures dictionary savings against WF3 and selects the smallest teste
     for (let variant = 0; variant < 3; variant++) for (const dictionary of [false, true]) candidates.push(api.__test.packBinary(payload, variant, dictionary));
     const smallest = Math.min(...candidates.flatMap(bytes => [bytes.length, deflateRawSync(bytes).length]));
     const code = await api.encode(collection), old = wf3(collection);
-    assert.equal(api.__test.unbase14(code.slice(4)).length - 4, smallest);
+    assert.ok(api.__test.unbase15(code.slice(4)).length - 4 <= smallest);
     assert.ok(code.length < old.length, `${people} people: ${code.length} vs ${old.length}`);
     sizes.push({ people, classes: people * 15, wf3: old.length, wf4: code.length });
   }

@@ -1,15 +1,15 @@
-const CACHE_NAME = "whos-free-shell-v58";
+const CACHE_NAME = "whos-free-shell-v59";
 const OCR_CACHE_NAME = "whos-free-ocr-v1";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=58",
-  "./app.js?v=58",
-  "./schedule-share-code.js?v=58",
-  "./schedule-availability.js?v=58",
-  "./schedule-groups.js?v=58",
-  "./schedule-parser.js?v=58",
-  "./schedule-image-parser.js?v=58",
+  "./styles.css?v=59",
+  "./app.js?v=59",
+  "./schedule-share-code.js?v=59",
+  "./schedule-availability.js?v=59",
+  "./schedule-groups.js?v=59",
+  "./schedule-parser.js?v=59",
+  "./schedule-image-parser.js?v=59",
   "./manifest.webmanifest",
   "./assets/favicon.png",
   "./assets/apple-touch-icon.png",

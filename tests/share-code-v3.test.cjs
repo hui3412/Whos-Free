@@ -99,13 +99,13 @@ test("each binary layout preserves row order, exact minutes, Unicode and semeste
   assert.deepEqual(plain(await api.decode(await api.encode(loneSurrogate))), expectedExport(await api.decode(oldCode(loneSurrogate))));
 });
 
-test("adaptive WF4 exports shorten synthetic collections compared with full WF2 exports", async () => {
+test("adaptive WF5 exports shorten synthetic collections compared with full WF2 exports", async () => {
   const sizes = [];
   for (const data of [week(), week(10), { people: { Empty: { classes: [] } } }, legacy.data]) {
     for (const compression of [true, false]) {
       const code = await codec(compression ? CompressionStream : false).encode(data);
       sizes.push({ people: Object.keys(data.people).length, entries: Object.values(data.people).reduce((n, p) => n + p.classes.length, 0), compression, old: oldCode(data, compression).length, new: code.length });
-      assert.match(code, /^WF4/);
+      assert.match(code, /^WF5/);
       assert.ok(code.length <= oldCode(data, compression).length);
       assert.deepEqual(plain(await api.decode(code)), expectedExport(await api.decode(oldCode(data, compression))));
     }
