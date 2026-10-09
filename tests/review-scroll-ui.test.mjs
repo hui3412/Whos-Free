@@ -1,25 +1,34 @@
-import { test } from "node:test";
+import { test as nodeTest } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { Window } from "happy-dom";
 
-async function review() {
+async function timetable(view) {
   const window = new Window({ url: "https://example.test/Whos-Free/", settings: { disableJavaScriptFileLoading: true, disableCSSFileLoading: true } });
   window.document.write(fs.readFileSync(new URL("../index.html", import.meta.url), "utf8"));
   window.setInterval = () => 0;
   window.matchMedia = () => ({ matches: true, addEventListener() {} });
   window.URL.createObjectURL = () => "blob:test";
   window.URL.revokeObjectURL = () => {};
+  if (view === "full schedule") window.localStorage.setItem("whos-free-local-schedules", JSON.stringify({ data: { people: { "Test student": { classes: [{ day: "Monday", start: "08:15", end: "09:35" }] } } }, meta: {} }));
   window.WhosFreeImageParser = { parseScheduleImage: async () => ({ name: "Test student", person: { classes: [{ day: "Monday", start: "08:15", end: "09:35" }] } }) };
   window.eval(fs.readFileSync(new URL("../schedule-availability.js", import.meta.url), "utf8"));
   window.eval(fs.readFileSync(new URL("../app.js", import.meta.url), "utf8"));
   const tick = () => new Promise(resolve => setTimeout(resolve, 30));
   await tick();
-  const input = window.document.getElementById("scheduleImageInput");
-  Object.defineProperty(input, "files", { value: [{ name: "timetable.png" }] });
-  input.dispatchEvent(new window.Event("change"));
+  if (view === "picture review") {
+    const input = window.document.getElementById("scheduleImageInput");
+    Object.defineProperty(input, "files", { value: [{ name: "timetable.png" }] });
+    input.dispatchEvent(new window.Event("change"));
+  } else {
+    window.document.getElementById("viewToggleButton").click();
+    window.document.querySelector('.person-card[data-person="Test student"]').click();
+    window.document.getElementById("fullScheduleButton").click();
+  }
   await tick();
-  const grid = window.document.getElementById("reviewGrid").parentElement;
+  const grid = window.document.getElementById(view === "picture review" ? "reviewGrid" : "personWeekGrid").parentElement;
+  const container = window.document.getElementById(view === "picture review" ? "imageReview" : "personWeekModal");
+  const actionButton = window.document.getElementById(view === "picture review" ? "saveImageScheduleButton" : "exportPersonScheduleButton");
   const dialog = grid.closest(".schedule-modal");
   Object.defineProperties(grid, { scrollHeight: { value: 700 }, clientHeight: { value: 300, configurable: true } });
   Object.defineProperties(dialog, { scrollHeight: { value: 2000 }, clientHeight: { value: 600 } });
@@ -44,8 +53,12 @@ async function review() {
     grid.dispatchEvent(event);
     return event;
   };
-  return { window, grid, dialog, touch, dispatch, advance, frame, frames };
+  return { window, grid, dialog, container, actionButton, touch, dispatch, advance, frame, frames };
 }
+
+for (const view of ["picture review", "full schedule"]) {
+const review = () => timetable(view);
+const test = (name, run) => nodeTest(`${view}: ${name}`, run);
 
 test("picture review continues the same upward swipe into the dialog at the grid bottom", async () => {
   const a = await review();
@@ -58,7 +71,7 @@ test("picture review continues the same upward swipe into the dialog at the grid
     a.dispatch("touchmove", [a.touch(101, 230)]);
     assert.equal(a.grid.scrollTop, 400);
     assert.equal(a.dialog.scrollTop, 160, "the same gesture must keep moving toward Save schedule");
-    assert.equal(a.window.document.getElementById("saveImageScheduleButton").disabled, false);
+    assert.equal(a.actionButton.disabled, false);
   } finally { a.window.happyDOM.abort(); }
 });
 
@@ -230,7 +243,7 @@ test("reversing the finger uses the last direction, and coasting stops at dialog
     a.advance(20); a.dispatch("touchmove", [a.touch(100, 250)]);
     a.dispatch("touchend", []);
     const stopped = a.dialog.scrollTop;
-    a.window.document.getElementById("imageReview").hidden = true;
+    a.container.hidden = true;
     a.frame();
     assert.equal(a.dialog.scrollTop, stopped);
     assert.equal(a.frames.size, 0);
@@ -258,3 +271,4 @@ test("faster flicks travel farther and coast distance is consistent at 60Hz and 
     assert.ok(sixty > slow * 2, "momentum responds to flick speed");
   } finally { await a.window.happyDOM.abort(); }
 });
+}

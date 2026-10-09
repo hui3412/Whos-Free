@@ -2691,6 +2691,6 @@ button:disabled { cursor: not-allowed; }
 .person-week-modal { width: min(1050px, 100%); }
 .person-week-grid { grid-template-columns: 54px repeat(7, minmax(140px, 1fr)); min-width: 1034px; }
 .person-week-block { cursor: default; white-space: pre-line; overflow-wrap: anywhere; line-height: 1.3; }
-.person-week-modal .review-grid-scroll { overscroll-behavior: auto; touch-action: auto; -webkit-overflow-scrolling: touch; }
+.person-week-modal .review-grid-scroll { overscroll-behavior: auto; touch-action: pan-x pinch-zoom; -webkit-overflow-scrolling: touch; }
 .person-week-modal .modal-header h2 { overflow-wrap: anywhere; }
 .person-week-modal .parser-status { margin-bottom: 0; }
