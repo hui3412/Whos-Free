@@ -1727,7 +1727,7 @@
     }
 
     fragment.querySelector(".create-schedule").addEventListener("click", () => { openScheduleModal(); openManualSchedule(); });
-    fragment.querySelector(".add-picture").addEventListener("click", chooseScheduleImage);
+    fragment.querySelectorAll(".add-picture").forEach(button => button.addEventListener("click", chooseScheduleImage));
     els.peopleList.append(fragment);
     renderEmptyDetail();
   }
@@ -3766,7 +3766,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=63", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=64", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
