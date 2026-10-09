@@ -13,6 +13,8 @@
     selectedDay: "Monday",
     selectedTime: "12:00",
     selectedPerson: null,
+    weekPerson: null,
+    personWeekRequest: 0,
     showEveryone: false,
     theme: loadTheme(),
     loadError: null,
@@ -165,6 +167,17 @@
     groupSlotDetails: document.getElementById("groupSlotDetails"),
     closeGroupWeekModal: document.getElementById("closeGroupWeekModal"),
     detailPanel: document.getElementById("detailPanel"),
+    personWeekModal: document.getElementById("personWeekModal"),
+    personWeekTitle: document.getElementById("personWeekTitle"),
+    personWeekSemester: document.getElementById("personWeekSemester"),
+    personWeekGrid: document.getElementById("personWeekGrid"),
+    personWeekEmpty: document.getElementById("personWeekEmpty"),
+    closePersonWeekModal: document.getElementById("closePersonWeekModal"),
+    exportPersonScheduleButton: document.getElementById("exportPersonScheduleButton"),
+    personWeekExport: document.getElementById("personWeekExport"),
+    personWeekCode: document.getElementById("personWeekCode"),
+    personWeekExportStatus: document.getElementById("personWeekExportStatus"),
+    copyPersonWeekCodeButton: document.getElementById("copyPersonWeekCodeButton"),
     toast: document.getElementById("toast"),
     dataSetupTemplate: document.getElementById("dataSetupTemplate"),
   };
@@ -2555,6 +2568,15 @@
     updateScheduleModal();
   }
 
+  function encodeSchedules(names) {
+    return window.WhosFreeShareCode.encode({ people: Object.fromEntries(names.map(name => [name, peopleMap()[name]])) });
+  }
+
+  function shareCodeReadyMessage(count, code) {
+    const messageSize = code.length <= 1000 ? "Fits a 1,000-character message." : "Over 1,000 characters. Select fewer schedules for one Instagram message.";
+    return `Code ready for ${count} schedule${count === 1 ? "" : "s"} · ${code.length.toLocaleString()} characters. ${messageSize}`;
+  }
+
   async function generateShareCode() {
     if (state.isParsing || state.codeMode !== "export") return;
     const names = [...els.exportPeopleList.querySelectorAll("input:checked")].map(input => input.dataset.person);
@@ -2563,11 +2585,9 @@
     updateScheduleModal();
     codeStatus(els.exportCodeStatus, "Creating the code on this device…");
     try {
-      const people = Object.fromEntries(names.map(name => [name, peopleMap()[name]]));
-      const code = await window.WhosFreeShareCode.encode({ people });
+      const code = await encodeSchedules(names);
       els.exportCodeOutput.value = code;
-      const messageSize = code.length <= 1000 ? "Fits a 1,000-character message." : "Over 1,000 characters. Select fewer schedules for one Instagram message.";
-      codeStatus(els.exportCodeStatus, `Code ready for ${names.length} schedule${names.length === 1 ? "" : "s"} · ${code.length.toLocaleString()} characters. ${messageSize}`, "success");
+      codeStatus(els.exportCodeStatus, shareCodeReadyMessage(names.length, code), "success");
       revealSection(els.exportCodeOutput.closest(".field-group"));
     } catch (error) {
       els.exportCodeOutput.value = "";
@@ -2577,13 +2597,18 @@
 
   async function copyShareCode() {
     if (!els.exportCodeOutput.value || state.isParsing) return;
+    await copyExportCode(els.exportCodeOutput, els.exportCodeStatus);
+  }
+
+  async function copyExportCode(output, status) {
+    if (!output.value) return;
     try {
-      await navigator.clipboard.writeText(els.exportCodeOutput.value);
-      codeStatus(els.exportCodeStatus, "Code copied. Paste it into your message.", "success");
+      await navigator.clipboard.writeText(output.value);
+      codeStatus(status, "Code copied. Paste it into your message.", "success");
     } catch {
-      els.exportCodeOutput.focus();
-      els.exportCodeOutput.select();
-      codeStatus(els.exportCodeStatus, "Select and copy the code above, then paste it into your message.");
+      output.focus();
+      output.select();
+      codeStatus(status, "Select and copy the code above, then paste it into your message.");
     }
   }
 
@@ -3162,6 +3187,97 @@
     return card;
   }
 
+  function openPersonWeek(name) {
+    const person = peopleMap()[name];
+    if (!person) return;
+    state.weekPerson = name;
+    state.personWeekRequest++;
+    els.personWeekTitle.textContent = displayName(name);
+    els.personWeekSemester.textContent = scheduleLabel(person, true);
+    els.personWeekExport.hidden = true;
+    els.personWeekCode.value = "";
+    els.copyPersonWeekCodeButton.disabled = true;
+    els.exportPersonScheduleButton.disabled = false;
+    codeStatus(els.personWeekExportStatus, "");
+    const classes = ALL_DAYS.flatMap(day => classesForDay(name, day)).filter(item => toMinutes(item.end) > toMinutes(item.start));
+    const first = Math.min(480, ...classes.map(item => Math.floor(toMinutes(item.start) / 60) * 60));
+    const last = Math.max(1200, ...classes.map(item => Math.ceil(toMinutes(item.end) / 60) * 60));
+    els.personWeekEmpty.hidden = classes.length > 0;
+    els.personWeekGrid.replaceChildren();
+    const axis = document.createElement("div");
+    axis.className = "review-time-axis";
+    for (let time = first; time <= last; time += 60) {
+      const label = document.createElement("span");
+      label.textContent = minuteTime(time);
+      label.style.top = `${time - first + 48}px`;
+      axis.append(label);
+    }
+    els.personWeekGrid.append(axis);
+    for (const day of ALL_DAYS) {
+      const column = document.createElement("div");
+      column.className = "review-day";
+      const heading = document.createElement("div");
+      heading.className = "review-day-heading group-day-heading";
+      heading.textContent = day;
+      const track = document.createElement("div");
+      track.className = "review-day-track";
+      track.style.height = `${last - first}px`;
+      for (const item of classes.filter(item => item.day === day)) {
+        const block = document.createElement("div");
+        block.className = "review-grid-block person-week-block";
+        block.dataset.day = day;
+        block.dataset.start = item.start;
+        block.dataset.end = item.end;
+        block.style.top = `${toMinutes(item.start) - first}px`;
+        block.style.height = `${toMinutes(item.end) - toMinutes(item.start)}px`;
+        block.textContent = `${item.start}–${item.end}\n${classLabel(item)}${item.instructor ? `\n${item.instructor}` : ""}`;
+        block.title = `${day} ${block.textContent}`;
+        track.append(block);
+      }
+      column.append(heading, track);
+      els.personWeekGrid.append(column);
+    }
+    els.personWeekModal.hidden = false;
+    const dialog = els.personWeekModal.querySelector(".person-week-modal");
+    dialog.scrollTop = 0;
+    els.personWeekGrid.parentElement.scrollLeft = 0;
+    document.body.style.overflow = "hidden";
+    els.closePersonWeekModal.focus();
+    animateModalOpen(els.personWeekModal, dialog);
+  }
+
+  function closePersonWeek() {
+    state.personWeekRequest++;
+    state.weekPerson = null;
+    els.personWeekModal.hidden = true;
+    if (![els.scheduleModal, els.settingsModal, els.groupsModal, els.groupWeekModal].some(modal => !modal.hidden)) document.body.style.overflow = "";
+    document.getElementById("fullScheduleButton")?.focus({ preventScroll: true });
+  }
+
+  async function exportPersonSchedule() {
+    const name = state.weekPerson;
+    if (!name || !peopleMap()[name] || els.exportPersonScheduleButton.disabled) return;
+    const request = ++state.personWeekRequest;
+    els.exportPersonScheduleButton.disabled = true;
+    els.copyPersonWeekCodeButton.disabled = true;
+    els.personWeekExport.hidden = true;
+    els.personWeekCode.value = "";
+    codeStatus(els.personWeekExportStatus, "Creating the code on this device…");
+    try {
+      const code = await encodeSchedules([name]);
+      if (request !== state.personWeekRequest) return;
+      els.personWeekCode.value = code;
+      els.personWeekExport.hidden = false;
+      els.copyPersonWeekCodeButton.disabled = false;
+      codeStatus(els.personWeekExportStatus, shareCodeReadyMessage(1, code), "success");
+      revealSection(els.personWeekExport, els.personWeekCode);
+    } catch (error) {
+      if (request === state.personWeekRequest) codeStatus(els.personWeekExportStatus, error.message || "The code could not be created.", "error");
+    } finally {
+      if (request === state.personWeekRequest) els.exportPersonScheduleButton.disabled = false;
+    }
+  }
+
   function renderDetail(name, day, minute) {
     if (!peopleMap()[name]) {
       state.selectedPerson = null;
@@ -3180,6 +3296,17 @@
     header.className = "detail-header";
     const nameEl = document.createElement("h2");
     nameEl.textContent = displayName(name);
+    const nameRow = document.createElement("div");
+    nameRow.className = "detail-name-row";
+    const fullSchedule = document.createElement("button");
+    fullSchedule.id = "fullScheduleButton";
+    fullSchedule.type = "button";
+    fullSchedule.className = "secondary-button full-schedule-button";
+    fullSchedule.textContent = "Full schedule";
+    fullSchedule.setAttribute("aria-label", `View full schedule for ${displayName(name)}`);
+    fullSchedule.setAttribute("aria-haspopup", "dialog");
+    fullSchedule.addEventListener("click", () => openPersonWeek(name));
+    nameRow.append(nameEl, fullSchedule);
     const semesterLabel = document.createElement("p");
     semesterLabel.className = `schedule-semester${semesterIsOlder(peopleMap()[name].semester) ? " semester-older" : ""}`;
     semesterLabel.textContent = scheduleLabel(peopleMap()[name], true);
@@ -3198,7 +3325,7 @@
       statusRow.append(until);
     }
 
-    header.append(nameEl, statusRow);
+    header.append(nameRow, statusRow);
     header.append(semesterLabel);
     els.detailPanel.append(header, timelineCard(name, day, minute));
 
@@ -3494,6 +3621,10 @@
     els.groupForm.addEventListener("submit", saveGroup);
     els.cancelGroupButton.addEventListener("click", cancelGroupEdit);
     els.closeGroupWeekModal.addEventListener("click", closeGroupWeek);
+    els.closePersonWeekModal.addEventListener("click", closePersonWeek);
+    els.personWeekModal.addEventListener("click", event => { if (event.target === els.personWeekModal) closePersonWeek(); });
+    els.exportPersonScheduleButton.addEventListener("click", exportPersonSchedule);
+    els.copyPersonWeekCodeButton.addEventListener("click", () => copyExportCode(els.personWeekCode, els.personWeekExportStatus));
     els.groupsModal.addEventListener("click", event => { if (event.target === els.groupsModal) closeGroupsModal(); });
     els.groupWeekModal.addEventListener("click", event => { if (event.target === els.groupWeekModal) closeGroupWeek(); });
     els.closeScheduleModal.addEventListener("click", closeScheduleModal);
@@ -3568,9 +3699,9 @@
         if (event.key === "Escape") event.preventDefault();
         return;
       }
-      const groupModal = !els.groupWeekModal.hidden ? els.groupWeekModal : !els.groupsModal.hidden ? els.groupsModal : null;
+      const groupModal = !els.personWeekModal.hidden ? els.personWeekModal : !els.groupWeekModal.hidden ? els.groupWeekModal : !els.groupsModal.hidden ? els.groupsModal : null;
       if (event.key === "Tab" && groupModal) {
-        const focusable = [...groupModal.querySelectorAll('button, input, [tabindex="0"]')].filter(item => !item.disabled && !item.closest("[hidden]"));
+        const focusable = [...groupModal.querySelectorAll('button, input, textarea, [tabindex="0"]')].filter(item => !item.disabled && !item.closest("[hidden]"));
         const first = focusable[0], last = focusable[focusable.length - 1];
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -3590,7 +3721,8 @@
         els.advancedScheduleOptions.querySelector("summary").focus({ preventScroll: true });
         return;
       }
-      if (!els.groupWeekModal.hidden) closeGroupWeek();
+      if (!els.personWeekModal.hidden) closePersonWeek();
+      else if (!els.groupWeekModal.hidden) closeGroupWeek();
       else if (!els.groupsModal.hidden) closeGroupsModal();
       else if (!els.settingsModal.hidden) closeSettingsModal();
       else if (!els.scheduleModal.hidden) closeScheduleModal();
@@ -3633,7 +3765,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=61", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=62", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
