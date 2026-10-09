@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=61">
+  <link rel="stylesheet" href="styles.css?v=62">
 </head>
 <body>
   <div class="app-shell">
@@ -358,6 +358,24 @@
     </section>
   </div>
 
+  <div id="personWeekModal" class="modal-backdrop" hidden>
+    <section class="schedule-modal person-week-modal panel" role="dialog" aria-modal="true" aria-labelledby="personWeekTitle">
+      <div class="modal-header">
+        <div><div class="section-kicker">Full schedule</div><h2 id="personWeekTitle"></h2><p id="personWeekSemester" class="schedule-semester"></p></div>
+        <button id="closePersonWeekModal" class="modal-close" type="button" aria-label="Close full schedule">×</button>
+      </div>
+      <p id="personWeekEmpty" class="settings-description" hidden>No classes scheduled.</p>
+      <div class="review-grid-scroll" tabindex="0" aria-label="Full weekly schedule. Scroll horizontally for more days."><div id="personWeekGrid" class="review-grid person-week-grid"></div></div>
+      <button id="exportPersonScheduleButton" class="primary-button" type="button">Export this schedule</button>
+      <div id="personWeekExport" class="share-code-panel" hidden>
+        <label class="field-group share-code-field"><span>Export code</span><textarea id="personWeekCode" rows="5" readonly spellcheck="false" autocapitalize="off" aria-describedby="personWeekExportStatus"></textarea></label>
+        <p class="share-code-note">Codes omit course codes and sections, and use instructor surnames. Your saved schedule keeps all details.</p>
+        <button id="copyPersonWeekCodeButton" class="secondary-button" type="button" disabled>Copy code</button>
+      </div>
+      <p id="personWeekExportStatus" class="parser-status" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <template id="dataSetupTemplate">
@@ -388,11 +406,11 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js" defer></script>
-  <script src="schedule-parser.js?v=61" defer></script>
-  <script src="schedule-image-parser.js?v=61" defer></script>
-  <script src="schedule-availability.js?v=61" defer></script>
-  <script src="schedule-share-code.js?v=61" defer></script>
-  <script src="schedule-groups.js?v=61" defer></script>
-  <script src="app.js?v=61" defer></script>
+  <script src="schedule-parser.js?v=62" defer></script>
+  <script src="schedule-image-parser.js?v=62" defer></script>
+  <script src="schedule-availability.js?v=62" defer></script>
+  <script src="schedule-share-code.js?v=62" defer></script>
+  <script src="schedule-groups.js?v=62" defer></script>
+  <script src="app.js?v=62" defer></script>
 </body>
 </html>

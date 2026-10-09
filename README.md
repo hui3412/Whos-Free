@@ -22,6 +22,14 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
 
+### Version 62 — Full schedules and quick individual exports
+
+October 8, 2026
+
+- Added Full schedule beside the selected person's name, opening a read-only seven-day timetable with exact class times.
+- Export and copy just that person's schedule directly from the bottom of the weekly view using the existing compact code system.
+- Preserve local details and canonical names when exporting a nicknamed person; retain the existing multi-person export and older-code imports.
+
 ### Version 61 — Restore header and relocate credits
 
 October 8, 2026
