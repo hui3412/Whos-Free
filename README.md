@@ -22,6 +22,14 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
 
+### Version 63 — Full schedule scrolling
+
+October 8, 2026
+
+- Full schedules now use the same touch scrolling and momentum handler as the import/edit timetable.
+- Vertical swipes and momentum transfer to the surrounding dialog at the timetable edges. Horizontal scrolling and pinch zoom remain native.
+- Run the scrolling regression cases against both timetable views.
+
 ### Version 62 — Full schedules and quick individual exports
 
 October 8, 2026

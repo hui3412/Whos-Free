@@ -3476,8 +3476,8 @@
     else renderEmptyDetail();
   }
 
-  function bindReviewGridScrolling() {
-    const grid = els.reviewGrid.closest(".review-grid-scroll");
+  function bindTimetableScrolling(timetable) {
+    const grid = timetable.closest(".review-grid-scroll");
     const dialog = grid.closest(".schedule-modal");
     let gesture = null;
     let momentumFrame = null;
@@ -3501,7 +3501,7 @@
       // rate. Integrate the distance rather than stepping a fixed pixel count.
       const frame = now => {
         momentumFrame = null;
-        if (els.scheduleModal.hidden || els.imageReview.hidden || state.importProgress) return;
+        if (grid.closest("[hidden]") || state.importProgress) return;
         const elapsed = Math.min(48, Math.max(0, now - previous));
         previous = now;
         const decay = Math.exp(-elapsed / 325);
@@ -3568,7 +3568,8 @@
   }
 
   function bindEvents() {
-    bindReviewGridScrolling();
+    bindTimetableScrolling(els.reviewGrid);
+    bindTimetableScrolling(els.personWeekGrid);
     document.addEventListener("click", event => {
       if (state.importProgress && !els.importProgressOverlay.contains(event.target)) {
         event.preventDefault();
@@ -3765,7 +3766,7 @@
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
-    navigator.serviceWorker.register("./service-worker.js?v=62", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./service-worker.js?v=63", { updateViaCache: "none" })
       .then(registration => registration.update())
       .catch(() => {
         // The app works normally even if PWA caching isn't available.
