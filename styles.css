@@ -888,7 +888,14 @@ input[type="time"]:disabled {
   color: var(--accent);
   font-size: 1.6rem;
   font-weight: 900;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
 }
+
+.data-setup-icon:hover { filter: brightness(1.1); }
+.data-setup-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .data-setup h3 {
   font-size: 1.14rem;

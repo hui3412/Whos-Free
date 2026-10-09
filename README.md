@@ -22,6 +22,12 @@ Fork improvements by **Hui En Qian**. Open the [live fork](https://hui3412.githu
 
 These three milestones group the completed work chronologically; their labels are separate from the app's package and cache versions.
 
+### Version 64 — Clickable empty-state plus
+
+October 8, 2026
+
+- The plus above Add your first schedule is now an accessible button that opens the same picture picker as Add schedule picture.
+
 ### Version 63 — Full schedule scrolling
 
 October 8, 2026
